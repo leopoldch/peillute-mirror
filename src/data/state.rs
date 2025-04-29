@@ -16,7 +16,6 @@ pub struct AppState {
 }
 
 impl AppState {
-    #[allow(unused)]
     pub fn new(
         site_id: u64,
         nb_sites_on_network: usize,

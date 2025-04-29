@@ -20,7 +20,7 @@ pub enum NetworkMessageCode {
 }
 
 impl NetworkMessageCode {
-    #[allow(unused)]
+
     #[allow(dead_code)]
     pub fn code(&self) -> &'static str {
         match self {
@@ -32,7 +32,7 @@ impl NetworkMessageCode {
             NetworkMessageCode::Sync => "sync",
         }
     }
-    #[allow(unused)]
+
     #[allow(dead_code)]
     pub fn from_code(code: &str) -> Option<Self> {
         match code {

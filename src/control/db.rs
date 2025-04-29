@@ -1,6 +1,5 @@
 use rusqlite::{Connection, Result, params};
 
-#[allow(unused)]
 #[derive(Debug)]
 pub struct Transaction {
     from_user: String,
@@ -49,7 +48,6 @@ pub fn is_database_initialized(conn: &Connection) -> Result<bool> {
     Ok(exists)
 }
 
-#[allow(unused)]
 pub fn drop_tables(conn: &Connection) -> Result<()> {
     conn.execute("DROP TABLE IF EXISTS Transactions;", [])?;
     conn.execute("DROP TABLE IF EXISTS User;", [])?;
@@ -189,7 +187,6 @@ pub fn withdraw(
     )
 }
 
-#[allow(unused)]
 pub fn create_user_with_solde(
     conn: &Connection,
     unique_name: &str,
@@ -274,6 +271,16 @@ pub fn print_users(conn: &Connection) -> Result<()> {
         log::info!("{}: {:.2}", name, solde);
     }
     Ok(())
+}
+
+pub fn get_users_names(conn: &Connection) -> Result<Vec<String>> {
+    let mut stmt = conn.prepare("SELECT unique_name FROM User")?;
+    let users = stmt.query_map([], |row| Ok(row.get::<_, String>(0)?))?;
+    let mut names = Vec::new();
+    for user in users {
+        names.push(user?);
+    }
+    Ok(names)
 }
 
 pub fn print_transactions(conn: &Connection) -> Result<()> {

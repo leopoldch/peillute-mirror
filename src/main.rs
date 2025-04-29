@@ -1,26 +1,13 @@
 use clap::Parser;
-use control::run_cli;
-use log::info;
-use rusqlite::{Connection, Result};
-use std::io::{self as std_io, Write};
-use std::net::SocketAddr;
-use std::sync::Arc;
-use tokio::io::{self as tokio_io, AsyncBufReadExt, BufReader};
-use tokio::net::TcpListener;
-use tokio::select;
-use tokio::sync::Mutex;
 
-mod clock;
 mod control;
-mod db;
-mod message;
-mod network;
-mod state;
+mod data;
+use data::{AppState, GLOBAL_APP_STATE};
+
+use std::net::SocketAddr;
 
 const LOW_PORT: u16 = 8000;
 const HIGH_PORT: u16 = 9000;
-
-use crate::state::{AppState, GLOBAL_APP_STATE};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -67,7 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         state.lamport_clock = std::sync::atomic::AtomicU64::new(args.site_id);
     }
 
-    network::announce(site_ip, LOW_PORT, HIGH_PORT).await;
+    control::announce(site_ip, LOW_PORT, HIGH_PORT).await;
 
     let network_listener_local_addr = local_addr.clone();
     let listener: TcpListener = TcpListener::bind(network_listener_local_addr).await?;
@@ -103,7 +90,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-//TODO : should not take local_lamport_time -> refer to app state instead, same for node_name
 async fn main_loop(
     _state: Arc<Mutex<AppState>>,
     lines: &mut tokio_io::Lines<BufReader<tokio_io::Stdin>>,
@@ -113,7 +99,7 @@ async fn main_loop(
     listener: TcpListener,
 ) {
     loop {
-        select! {
+        tokio::select! {
             line = lines.next_line() => {
                 let _ = run_cli(line, &conn,local_lamport_time, node_name);
             }
@@ -141,7 +127,7 @@ async fn disconnect() {
         )
     };
 
-    info!("Shutting down site {}.", site_id);
+    log::info!("Shutting down site {}.", site_id);
     for peer_addr in peer_addrs {
         let peer_addr_str = peer_addr.to_string();
         if let Err(e) = network::send_message(

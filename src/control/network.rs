@@ -45,7 +45,7 @@ impl NetworkManager {
         self.connection_pool.get(addr).map(|p| p.sender.clone())
     }
 
-    #[allow(unused)]
+
     pub fn get_all_connections(&self) -> Vec<SocketAddr> {
         self.connection_pool.keys().cloned().collect()
     }
