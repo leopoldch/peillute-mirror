@@ -1,7 +1,4 @@
-mod cli;
 mod db;
-mod network;
 
-pub use cli::*;
-pub use db::*;
-pub use network::*;
+#[cfg(feature = "server")]
+pub use db::{add_user, get_users, init_db, is_database_initialized};
