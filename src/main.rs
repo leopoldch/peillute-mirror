@@ -72,10 +72,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let listener: TcpListener = TcpListener::bind(network_listener_local_addr).await?;
     log::debug!("Listening on: {}", network_listener_local_addr);
 
-    let conn: Connection = Connection::open("peillute.db").unwrap();
-    if !db::is_database_initialized(&conn)? {
-        let _ = db::init_db(&conn);
-    }
 
     let (mut local_lamport_time, node_name) = {
             let state = LOCAL_APP_STATE.lock().await;
@@ -96,7 +92,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _ = main_loop(
         main_loop_app_state,
         &mut lines,
-        &conn,
         &mut local_lamport_time,
         node_name.as_str(),
         listener,
@@ -110,7 +105,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 async fn main_loop(
     _state: Arc<Mutex<AppState>>,
     lines: &mut tokio_io::Lines<BufReader<tokio_io::Stdin>>,
-    conn: &Connection,
     local_lamport_time: &mut i64,
     node_name: &str,
     listener: TcpListener,
@@ -124,7 +118,7 @@ async fn main_loop(
                     state.increment_lamport();
                 }
                 let command = run_cli(line);
-                let _ = handle_command(command, conn, local_lamport_time, node_name, false).await;
+                let _ = handle_command(command, local_lamport_time, node_name, false).await;
             }
             Ok((stream, addr)) = listener.accept() => {
                 let _ = network::start_listening(stream, addr).await;

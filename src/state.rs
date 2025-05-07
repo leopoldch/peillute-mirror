@@ -2,8 +2,9 @@ use lazy_static::lazy_static;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::collections::HashMap;
-
+use rusqlite::Connection;
 use crate::clock::Clock;
+use crate::db::init_db;
 
 pub struct AppState {
     // --- Site Info ---
@@ -14,6 +15,9 @@ pub struct AppState {
 
     // --- Logical Clocks ---
     pub clocks: Clock,
+    pub connection: rusqlite::Connection,
+
+
 }
 
 impl AppState {
@@ -25,6 +29,7 @@ impl AppState {
         peer_addrs: Vec<SocketAddr>,
     ) -> Self {
         let clocks = Clock::new();
+        let connection : rusqlite::Connection = Connection::open("peillute.db").unwrap();
 
         Self {
             site_id,
@@ -32,6 +37,7 @@ impl AppState {
             local_addr,
             peer_addrs,
             clocks,
+            connection,
         }
     }
     #[allow(unused)]
@@ -108,6 +114,13 @@ impl AppState {
     pub fn update_lamport(&mut self, received_lamport: i64) {
         self.clocks.update_lamport(received_lamport);
     }
+
+    #[allow(unused)]
+    #[allow(dead_code)]
+    pub fn get_connection(&self) -> &Connection {
+        &self.connection
+    }
+
 
 
 }

@@ -60,13 +60,13 @@ fn parse_command(input: &str) -> Command {
     }
 }
 
-pub async fn handle_command(cmd: Command, conn: &Connection, lamport_time: &mut i64, node: &str, from_network : bool)-> Result<(), Box<dyn Error>> {
+pub async fn handle_command(cmd: Command, lamport_time: &mut i64, node: &str, from_network : bool)-> Result<(), Box<dyn Error>> {
 
     
     match cmd {
         Command::CreateUser => {
             let name = prompt("Username");
-            db::create_user(conn, &name).unwrap();
+            db::create_user(&name).unwrap();
             if !from_network {
                 let _ = send_message_to_all(
                     &format!("{}", name),
@@ -78,22 +78,22 @@ pub async fn handle_command(cmd: Command, conn: &Connection, lamport_time: &mut 
         }
 
         Command::UserAccounts => {
-            db::print_users(conn).unwrap();
+            db::print_users().unwrap();
         }
 
         Command::PrintUserTransactions => {
             let name = prompt("Username");
-            db::print_transaction_for_user(conn, &name).unwrap();
+            db::print_transaction_for_user(&name).unwrap();
         }
 
         Command::PrintTransactions => {
-            db::print_transactions(conn).unwrap();
+            db::print_transactions().unwrap();
         }
 
         Command::Deposit => {
             let name = prompt("Username");
             let amount = prompt_parse::<f64>("Deposit amount");
-            db::deposit(conn, &name, amount, lamport_time, node).unwrap();
+            db::deposit(&name, amount, lamport_time, node).unwrap();
             if !from_network {
                 let _ = send_message_to_all(
                     &format!("{}-{}", name, amount),
@@ -107,7 +107,7 @@ pub async fn handle_command(cmd: Command, conn: &Connection, lamport_time: &mut 
         Command::Withdraw => {
             let name = prompt("Username");
             let amount = prompt_parse::<f64>("Withdraw amount");
-            db::withdraw(conn, &name, amount, lamport_time, node).unwrap();
+            db::withdraw(&name, amount, lamport_time, node).unwrap();
             if !from_network {
                 let _ = send_message_to_all(
                     &format!("{}-{}", name, amount),
@@ -122,9 +122,9 @@ pub async fn handle_command(cmd: Command, conn: &Connection, lamport_time: &mut 
         Command::Transfer => {
             let name = prompt("Username");
             let amount = prompt_parse::<f64>("Transfer amount");
-            let _ = db::print_users(conn);
+            let _ = db::print_users();
             let beneficiary = prompt("Beneficiary");
-            db::create_transaction(conn, &name, &beneficiary, amount, lamport_time, node, "")
+            db::create_transaction(&name, &beneficiary, amount, lamport_time, node, "")
                 .unwrap();
 
             if !from_network {
@@ -141,7 +141,7 @@ pub async fn handle_command(cmd: Command, conn: &Connection, lamport_time: &mut 
         Command::Pay => {
             let name = prompt("Username");
             let amount = prompt_parse::<f64>("Payment amount");
-            db::create_transaction(conn, &name, "NULL", amount, lamport_time, node, "").unwrap();
+            db::create_transaction(&name, "NULL", amount, lamport_time, node, "").unwrap();
             
             if !from_network {
                 let _ = send_message_to_all(
@@ -156,10 +156,10 @@ pub async fn handle_command(cmd: Command, conn: &Connection, lamport_time: &mut 
 
         Command::Refund => {
             let name = prompt("Username");
-            db::print_transaction_for_user(conn, &name).unwrap();
+            db::print_transaction_for_user(&name).unwrap();
             let transac_time = prompt_parse::<i64>("Lamport time");
             let transac_node = prompt("Node");
-            db::refund_transaction(conn, transac_time, &transac_node, lamport_time, node).unwrap();
+            db::refund_transaction(transac_time, &transac_node, lamport_time, node).unwrap();
 
             if !from_network {
                // TODO : send message
