@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::collections::HashMap;
 use rusqlite::Connection;
 use crate::clock::Clock;
+use crate::db;
 use crate::db::init_db;
 
 pub struct AppState {
@@ -15,6 +16,8 @@ pub struct AppState {
 
     // --- Logical Clocks ---
     pub clocks: Clock,
+
+    // --- DB connection ---
     pub connection: rusqlite::Connection,
 
 
@@ -30,7 +33,6 @@ impl AppState {
     ) -> Self {
         let clocks = Clock::new();
         let connection : rusqlite::Connection = Connection::open("peillute.db").unwrap();
-
         Self {
             site_id,
             nb_sites_on_network,
@@ -141,7 +143,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_new_state() {
+    async fn test_new_state() {
         let site_id = "A".to_string();
         let num_sites = 2;
         let peer_addrs = vec![
@@ -149,7 +151,7 @@ mod tests {
             "127.0.0.1:8082".parse().unwrap(),
         ];
         let local_addr: SocketAddr = format!("127.0.0.1:{}", 8080).parse().unwrap();
-        let shared_state = AppState::new(site_id.clone(), num_sites, local_addr, peer_addrs.clone());
+        let shared_state = AppState::new(site_id.clone(), num_sites, local_addr, peer_addrs.clone()).await;
 
         assert_eq!(shared_state.site_id, site_id);
         assert_eq!(shared_state.nb_sites_on_network, num_sites);
@@ -158,7 +160,7 @@ mod tests {
     }
 
     #[test]
-    fn test_add_peer() {
+    async fn test_add_peer() {
         let site_id = "A".to_string();
         let num_sites = 2;
         let peer_addrs = vec![
@@ -166,7 +168,7 @@ mod tests {
             "127.0.0.1:8082".parse().unwrap(),
         ];
         let local_addr = "127.0.0.1:8080".parse().unwrap();
-        let mut shared_state = AppState::new(site_id.clone(), num_sites, local_addr, peer_addrs.clone());
+        let mut shared_state = AppState::new(site_id.clone(), num_sites, local_addr, peer_addrs.clone()).await;
 
         shared_state.add_peer("B", "127.0.0.1:8083".parse().unwrap());
 
@@ -177,7 +179,7 @@ mod tests {
 
 
     #[test]
-    fn test_remove_peer() {
+    async fn test_remove_peer() {
         let site_id = "A".to_string();
         let num_sites = 2;
         let peer_addrs = vec![
@@ -185,7 +187,7 @@ mod tests {
             "127.0.0.1:8082".parse().unwrap(),
         ];
         let local_addr = "127.0.0.1:8080".parse().unwrap();
-        let mut shared_state = AppState::new(site_id.clone(), num_sites, local_addr, peer_addrs.clone());
+        let mut shared_state = AppState::new(site_id.clone(), num_sites, local_addr, peer_addrs.clone()).await;
 
         shared_state.add_peer("B", "127.0.0.1:8083".parse().unwrap());
         shared_state.remove_peer("127.0.0.1:8081".parse().unwrap());

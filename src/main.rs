@@ -111,6 +111,7 @@ async fn main_loop(
 ) {
     loop {
         select! {
+            // récéption d'une commande sur le terminal
             line = lines.next_line() => {
                 {
                     let mut state = LOCAL_APP_STATE.lock().await;
@@ -120,9 +121,13 @@ async fn main_loop(
                 let command = run_cli(line);
                 let _ = handle_command(command, local_lamport_time, node_name, false).await;
             }
+
+            // récéption d'une nouvelle connexion + gestion des connexions existantes
             Ok((stream, addr)) = listener.accept() => {
                 let _ = network::start_listening(stream, addr).await;
             }
+
+            // réception d'un ctrl + c
             _ = tokio::signal::ctrl_c() => {
                 disconnect().await;
                 log::info!("👋 Bye !");

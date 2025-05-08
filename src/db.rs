@@ -12,11 +12,12 @@ pub struct Transaction {
     optional_msg: Option<String>,
 }
 
+
 const NULL: &str = "NULL";
 
 pub async fn init_db() -> Result<()> {
     {
-        let mut state = LOCAL_APP_STATE.lock().await;
+        let state = LOCAL_APP_STATE.lock().await;
         state.connection.execute(
             "CREATE TABLE IF NOT EXISTS User (
             unique_name TEXT PRIMARY KEY,
@@ -47,7 +48,7 @@ pub async fn init_db() -> Result<()> {
 
 pub async fn is_database_initialized() -> Result<bool> {
     {
-        let mut state = LOCAL_APP_STATE.lock().await;
+        let state = LOCAL_APP_STATE.lock().await;
         let mut stmt = state.connection.prepare(
             "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'Transactions')",
         )?;
@@ -59,7 +60,7 @@ pub async fn is_database_initialized() -> Result<bool> {
 #[allow(unused)]
 pub async fn drop_tables() -> Result<()> {
     {
-        let mut state = LOCAL_APP_STATE.lock().await;
+        let state = LOCAL_APP_STATE.lock().await;
         state.connection.execute("DROP TABLE IF EXISTS Transactions;", [])?;
         state.connection.execute("DROP TABLE IF EXISTS User;", [])?;
     }
@@ -69,7 +70,7 @@ pub async fn drop_tables() -> Result<()> {
 
 pub async fn user_exists(name: &str) -> Result<bool> {
     {
-        let mut state = LOCAL_APP_STATE.lock().await;
+        let state = LOCAL_APP_STATE.lock().await;
         let mut stmt = state.connection.prepare("SELECT EXISTS(SELECT 1 FROM User WHERE unique_name = ?1)")?;
         let exists: bool = stmt.query_row(params![name], |row| row.get(0))?;
         Ok(exists)
@@ -77,12 +78,12 @@ pub async fn user_exists(name: &str) -> Result<bool> {
 }
 
 pub async fn create_user(unique_name: &str) -> Result<()> {
-    if user_exists(unique_name)? {
+    if user_exists(unique_name).await? {
         log::warn!("User '{}' already exists.", unique_name);
         return Ok(());
     }
     {
-        let mut state = LOCAL_APP_STATE.lock().await;
+        let state = LOCAL_APP_STATE.lock().await;
         state.connection.execute(
             "INSERT INTO User (unique_name, solde) VALUES (?1, 0)",
             params![unique_name],
@@ -93,7 +94,7 @@ pub async fn create_user(unique_name: &str) -> Result<()> {
 
 pub async fn calculate_solde(name: &str) -> Result<f64> {
     {
-        let mut state = LOCAL_APP_STATE.lock().await;
+        let state = LOCAL_APP_STATE.lock().await;
         let mut stmt = state.connection.prepare(
             "SELECT
             IFNULL((SELECT SUM(amount) FROM Transactions WHERE to_user = ?1), 0) -
@@ -105,13 +106,13 @@ pub async fn calculate_solde(name: &str) -> Result<f64> {
 }
 
 pub async fn update_solde(name: &str) -> Result<()> {
-    if !user_exists(name)? {
+    if !user_exists(name).await? {
         log::error!("User '{}' does not exist.", name);
         return Ok(());
     }
-    let solde = calculate_solde(name)?;
+    let solde = calculate_solde(name).await?;
     {
-        let mut state = LOCAL_APP_STATE.lock().await;
+        let state = LOCAL_APP_STATE.lock().await;
         state.connection.execute(
             "UPDATE User SET solde = ?1 WHERE unique_name = ?2",
             params![solde, name],
@@ -122,7 +123,7 @@ pub async fn update_solde(name: &str) -> Result<()> {
 
 pub async fn ensure_user(name: &str) -> Result<()> {
     if name != NULL && !user_exists(name).await? {
-        create_user(name)?;
+        create_user(name).await?;
     }
     Ok(())
 }
@@ -135,7 +136,7 @@ pub async fn create_transaction(
     source_node: &str,
     optional_msg: &str,
 ) -> Result<()> {
-    if from_user != NULL && calculate_solde(from_user)? < amount {
+    if from_user != NULL && calculate_solde(from_user).await? < amount {
         log::error!(
             "Insufficient funds: '{}' has less than {}.",
             from_user,
@@ -144,11 +145,11 @@ pub async fn create_transaction(
         return Err(rusqlite::Error::InvalidQuery);
     }
 
-    ensure_user(from_user)?;
-    ensure_user(to_user)?;
+    ensure_user(from_user).await?;
+    ensure_user(to_user).await?;
 
     {
-        let mut state = LOCAL_APP_STATE.lock().await;
+        let state = LOCAL_APP_STATE.lock().await;
         state.connection.execute(
             "INSERT INTO Transactions (from_user, to_user, amount, lamport_time, source_node, optional_msg)
         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
@@ -159,10 +160,10 @@ pub async fn create_transaction(
     *lamport_time += 1;
 
     if from_user != NULL {
-        update_solde(from_user)?;
+        update_solde(from_user).await?;
     }
     if to_user != NULL {
-        update_solde(to_user)?;
+        update_solde(to_user).await?;
     }
 
     Ok(())
@@ -178,7 +179,7 @@ pub async fn deposit(
         log::error!("Negative deposit amount: {}", amount);
         return Err(rusqlite::Error::InvalidQuery);
     }
-    if !user_exists(user)?{
+    if !user_exists(user).await?{
         return Err(rusqlite::Error::InvalidQuery);
     }
     create_transaction(
@@ -240,7 +241,7 @@ pub async fn get_transaction(
     node: &str,
 ) -> Result<Option<Transaction>> {
     {
-        let mut state = LOCAL_APP_STATE.lock().await;
+        let state = LOCAL_APP_STATE.lock().await;
         let mut stmt = state.connection.prepare(
             "SELECT from_user, to_user, amount, lamport_time, source_node, optional_msg
         FROM Transactions WHERE lamport_time = ?1 AND source_node = ?2",
@@ -269,7 +270,7 @@ pub async fn refund_transaction(
     lamport_time: &mut i64,
     source_node: &str,
 ) -> Result<()> {
-    if let Some(tx) = get_transaction(transac_time, node)? {
+    if let Some(tx) = get_transaction(transac_time, node).await? {
         create_transaction(
             &tx.to_user,
             &tx.from_user,
@@ -290,7 +291,7 @@ pub async fn refund_transaction(
 
 pub async fn print_users() -> Result<()> {
     {
-        let mut state = LOCAL_APP_STATE.lock().await;
+        let state = LOCAL_APP_STATE.lock().await;
         let mut stmt = state.connection.prepare("SELECT unique_name, solde FROM User")?;
         let users = stmt.query_map([], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
@@ -307,7 +308,7 @@ pub async fn print_users() -> Result<()> {
 
 pub async fn print_transactions() -> Result<()> {
     {
-        let mut state = LOCAL_APP_STATE.lock().await;
+        let state = LOCAL_APP_STATE.lock().await;
         let mut stmt = state.connection.prepare(
             "SELECT from_user, to_user, amount, lamport_time, source_node, optional_msg FROM Transactions",
         )?;
@@ -339,9 +340,9 @@ pub async fn print_transactions() -> Result<()> {
     Ok(())
 }
 
-pub async fn print_transaction_for_user(conn: &Connection, name: &str) -> Result<()> {
+pub async fn print_transaction_for_user(name: &str) -> Result<()> {
     {
-        let mut state = LOCAL_APP_STATE.lock().await;
+        let state = LOCAL_APP_STATE.lock().await;
         let mut stmt = state.connection.prepare(
             "SELECT from_user, to_user, amount, lamport_time, source_node, optional_msg
         FROM Transactions WHERE from_user = ?1",
