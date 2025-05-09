@@ -57,8 +57,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     control::announce(site_ip, LOW_PORT, HIGH_PORT).await;
 
     let network_listener_local_addr = local_addr.clone();
-    let listener: TcpListener = TcpListener::bind(network_listener_local_addr).await?;
-    log::debug!("Listening on: {}", network_listener_local_addr);
+    let listener: tokio::net::TcpListener =
+        tokio::net::TcpListener::bind(network_listener_local_addr).await?;
+    println!("Listening on: {}", network_listener_local_addr);
 
     let conn: Connection = Connection::open("peillute.db").unwrap();
     if !db::is_database_initialized(&conn)? {
@@ -72,7 +73,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let reader: BufReader<tokio_io::Stdin> = BufReader::new(stdin);
     let mut lines: tokio_io::Lines<BufReader<tokio_io::Stdin>> = reader.lines();
 
-    log::info!("Welcome on peillute, write /help to get the command list.");
+    println!("Welcome on peillute, write /help to get the command list.");
     print!("> ");
     std_io::stdout().flush().unwrap();
 
@@ -108,7 +109,7 @@ async fn main_loop(
             }
             _ = tokio::signal::ctrl_c() => {
                 disconnect().await;
-                log::info!("👋 Bye !");
+                println!("👋 Bye !");
                 std::process::exit(0);
             }
         }
@@ -127,7 +128,7 @@ async fn disconnect() {
         )
     };
 
-    log::info!("Shutting down site {}.", site_id);
+    println!("Shutting down site {}.", site_id);
     for peer_addr in peer_addrs {
         let peer_addr_str = peer_addr.to_string();
         if let Err(e) = network::send_message(
@@ -140,7 +141,7 @@ async fn disconnect() {
         )
         .await
         {
-            log::error!("Error sending message to {}: {}", peer_addr_str, e);
+            tracing::error!("Error sending message to {}: {}", peer_addr_str, e);
         }
     }
 }

@@ -34,7 +34,7 @@ pub fn init_db(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
         [],
     )?;
 
-    log::debug!("Database initialized successfully.");
+    println!("Database initialized successfully.");
     Ok(())
 }
 
@@ -55,10 +55,10 @@ pub fn print_users(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
         Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
     })?;
 
-    log::info!("-- Users --");
+    println!("-- Users --");
     for user in users {
         let (name, solde) = user?;
-        log::info!("{}: {:.2}", name, solde);
+        println!("{}: {:.2}", name, solde);
     }
     Ok(())
 }
@@ -76,7 +76,7 @@ pub fn get_users(conn: &rusqlite::Connection) -> rusqlite::Result<Vec<String>> {
 pub fn add_user(conn: &rusqlite::Connection, unique_name: &str) -> rusqlite::Result<()> {
     use rusqlite::params;
     if user_exists(conn, unique_name)? {
-        log::warn!("User '{}' already exists.", unique_name);
+        tracing::warn!("User '{}' already exists.", unique_name);
         return Ok(());
     }
     conn.execute(

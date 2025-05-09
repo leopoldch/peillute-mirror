@@ -17,11 +17,11 @@ pub fn run_cli(
             0
         }
         Ok(None) => {
-            log::info!("Aucun input");
+            println!("Aucun input");
             0
         }
         Err(e) => {
-            log::error!("Erreur de lecture stdin : {}", e);
+            tracing::error!("Erreur de lecture stdin : {}", e);
             1
         }
     }
@@ -113,20 +113,20 @@ fn handle_command(cmd: Command, conn: &Connection, lamport_time: &mut i64, node:
         }
 
         Command::Help => {
-            log::info!("📜 Command list:");
-            log::info!("/create_user      - Create a personal account");
-            log::info!("/user_accounts    - List all users");
-            log::info!("/print_user_tsx   - Show a user’s transactions");
-            log::info!("/print_tsx        - Show all system transactions");
-            log::info!("/deposit          - Deposit money to an account");
-            log::info!("/withdraw         - Withdraw money from an account");
-            log::info!("/transfer         - Transfer money to another user");
-            log::info!("/pay              - Make a payment (to NULL)");
-            log::info!("/refund           - Refund a transaction");
+            println!("📜 Command list:");
+            println!("/create_user      - Create a personal account");
+            println!("/user_accounts    - List all users");
+            println!("/print_user_tsx   - Show a user’s transactions");
+            println!("/print_tsx        - Show all system transactions");
+            println!("/deposit          - Deposit money to an account");
+            println!("/withdraw         - Withdraw money from an account");
+            println!("/transfer         - Transfer money to another user");
+            println!("/pay              - Make a payment (to NULL)");
+            println!("/refund           - Refund a transaction");
         }
 
         Command::Unknown(cmd) => {
-            log::info!("❓ Unknown command: {}", cmd);
+            println!("❓ Unknown command: {}", cmd);
         }
     }
 }

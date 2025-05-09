@@ -72,6 +72,7 @@ impl AppState {
 }
 
 // Singleton
+#[cfg(feature = "server")]
 lazy_static! {
     pub static ref GLOBAL_APP_STATE: Arc<tokio::sync::Mutex<AppState>> =
         Arc::new(tokio::sync::Mutex::new(AppState::new(

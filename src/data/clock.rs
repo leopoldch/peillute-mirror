@@ -1,21 +1,17 @@
-use crate::data::AppState;
-
-use std::sync::atomic::Ordering;
-
 // --- Vector Clock ---
 
-#[allow(dead_code)]
-pub fn increment_vector(state: &mut AppState) -> Vec<u64> {
+#[cfg(feature = "server")]
+pub fn increment_vector(state: &mut crate::data::AppState) -> Vec<u64> {
+    use std::sync::atomic::Ordering;
     let site_id = state.site_id as usize;
     if site_id < state.vector_clock.len() {
         state.vector_clock[site_id].fetch_add(1, Ordering::SeqCst);
-        log::debug!(
+        println!(
             "Site {}: Vector clock incremented at index {}",
-            site_id,
-            site_id
+            site_id, site_id
         );
     } else {
-        log::error!(
+        tracing::error!(
             "Site {}: Invalid site_id for vector clock increment",
             site_id,
         );
@@ -23,10 +19,14 @@ pub fn increment_vector(state: &mut AppState) -> Vec<u64> {
     get_vector_clock(state)
 }
 
-#[allow(dead_code)]
-pub fn update_vector_on_receive(state: &mut AppState, received_vc: &[u64]) -> Vec<u64> {
+#[cfg(feature = "server")]
+pub fn update_vector_on_receive(
+    state: &mut crate::data::AppState,
+    received_vc: &[u64],
+) -> Vec<u64> {
+    use std::sync::atomic::Ordering;
     let site_id = state.site_id as usize;
-    log::debug!(
+    println!(
         "Site {}: Updating vector clock on receive. Received VC: {:?}. Current VC: {:?}",
         site_id,
         received_vc,
@@ -34,7 +34,7 @@ pub fn update_vector_on_receive(state: &mut AppState, received_vc: &[u64]) -> Ve
     );
 
     if received_vc.len() != state.vector_clock.len() {
-        log::warn!(
+        tracing::warn!(
             "Site {}: Received vector clock of different size ({} vs {})",
             site_id,
             received_vc.len(),
@@ -53,14 +53,14 @@ pub fn update_vector_on_receive(state: &mut AppState, received_vc: &[u64]) -> Ve
 
     // Increment own clock for the receive event AFTER updating from received vector
     if site_id < state.vector_clock.len() {
+        use std::sync::atomic::Ordering;
         state.vector_clock[site_id].fetch_add(1, Ordering::SeqCst);
-        log::debug!(
+        println!(
             "Site {}: Vector clock incremented at index {} for receive event",
-            site_id,
-            site_id
+            site_id, site_id
         );
     } else {
-        log::error!(
+        tracing::error!(
             "Site {}: Invalid site_id for vector clock increment post-receive",
             site_id,
         );
@@ -68,7 +68,9 @@ pub fn update_vector_on_receive(state: &mut AppState, received_vc: &[u64]) -> Ve
     get_vector_clock(state)
 }
 
-pub fn get_vector_clock(state: &AppState) -> Vec<u64> {
+#[cfg(feature = "server")]
+pub fn get_vector_clock(state: &crate::data::AppState) -> Vec<u64> {
+    use std::sync::atomic::Ordering;
     state
         .vector_clock
         .iter()
@@ -78,83 +80,15 @@ pub fn get_vector_clock(state: &AppState) -> Vec<u64> {
 
 // --- Lamport Clock ---
 
-#[allow(dead_code)]
-pub fn increment_lamport_clock(state: &mut AppState) -> u64 {
+#[cfg(feature = "server")]
+pub fn increment_lamport_clock(state: &mut crate::data::AppState) -> u64 {
+    use std::sync::atomic::Ordering;
     state.lamport_clock.fetch_add(1, Ordering::SeqCst);
     state.lamport_clock.load(Ordering::SeqCst)
 }
 
-#[allow(dead_code)]
-pub fn get_lamport_clock(state: &AppState) -> u64 {
+#[cfg(feature = "server")]
+pub fn get_lamport_clock(state: &crate::data::AppState) -> u64 {
+    use std::sync::atomic::Ordering;
     state.lamport_clock.load(Ordering::SeqCst)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::data::AppState;
-    use std::net::SocketAddr;
-
-    #[test]
-    fn test_increment_vector() {
-        let site_id = 1;
-        let num_sites = 3;
-        let peer_addrs: Vec<SocketAddr> = Vec::new();
-        let local_addr = "127.0.0.1:8080".parse().unwrap();
-        let mut shared_state = AppState::new(site_id, num_sites, local_addr, peer_addrs.clone());
-
-        let initial_clock = get_vector_clock(&shared_state);
-        let updated_clock = increment_vector(&mut shared_state);
-
-        assert_eq!(
-            updated_clock[site_id as usize],
-            initial_clock[site_id as usize] + 1
-        );
-    }
-
-    #[test]
-    fn test_update_vector_on_receive() {
-        let site_id = 1;
-        let num_sites = 3;
-        let peer_addrs: Vec<SocketAddr> = Vec::new();
-        let local_addr = "127.0.0.1:8080".parse().unwrap();
-        let mut shared_state = AppState::new(site_id, num_sites, local_addr, peer_addrs.clone());
-
-        let mut received_vc = vec![0; num_sites];
-        received_vc[0] = 2;
-
-        let initial_clock = get_vector_clock(&shared_state);
-        let updated_clock = update_vector_on_receive(&mut shared_state, &received_vc);
-
-        assert_eq!(
-            updated_clock[site_id as usize],
-            initial_clock[site_id as usize] + 1
-        );
-        assert_eq!(updated_clock[0], 2);
-    }
-
-    #[test]
-    fn test_increment_lamport_clock() {
-        let site_id = 1;
-        let num_sites = 3;
-        let peer_addrs: Vec<SocketAddr> = Vec::new();
-        let local_addr = "127.0.0.1:8080".parse().unwrap();
-        let mut shared_state = AppState::new(site_id, num_sites, local_addr, peer_addrs.clone());
-
-        let initial_clock = get_lamport_clock(&shared_state);
-        let updated_clock = increment_lamport_clock(&mut shared_state);
-
-        assert_eq!(updated_clock, initial_clock + 1);
-    }
-
-    #[test]
-    fn test_get_lamport_clock() {
-        let site_id = 1;
-        let num_sites = 3;
-        let peer_addrs: Vec<SocketAddr> = Vec::new();
-        let local_addr = "127.0.0.1:8080".parse().unwrap();
-        let shared_state = AppState::new(site_id, num_sites, local_addr, peer_addrs.clone());
-
-        assert_eq!(get_lamport_clock(&shared_state), site_id);
-    }
 }

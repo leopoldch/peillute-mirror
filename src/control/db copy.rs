@@ -36,7 +36,7 @@ pub fn init_db(conn: &rusqlite::Connection) -> Result<()> {
         [],
     )?;
 
-    log::debug!("Database initialized successfully.");
+    println!("Database initialized successfully.");
     Ok(())
 }
 
@@ -53,7 +53,7 @@ pub fn is_database_initialized(conn: &rusqlite::Connection) -> Result<bool> {
 pub fn drop_tables(conn: &Connection) -> Result<()> {
     conn.execute("DROP TABLE IF EXISTS Transactions;", [])?;
     conn.execute("DROP TABLE IF EXISTS User;", [])?;
-    log::debug!("Tables dropped successfully.");
+    println!("Tables dropped successfully.");
     Ok(())
 }
 
@@ -65,7 +65,7 @@ pub fn user_exists(conn: &Connection, name: &str) -> Result<bool> {
 
 pub fn create_user(conn: &Connection, unique_name: &str) -> Result<()> {
     if user_exists(conn, unique_name)? {
-        log::warn!("User '{}' already exists.", unique_name);
+        tracing::warn!("User '{}' already exists.", unique_name);
         return Ok(());
     }
     conn.execute(
@@ -88,7 +88,7 @@ pub fn calculate_solde(name: &str) -> Result<f64> {
 
 pub fn update_solde(conn: &Connection, name: &str) -> Result<()> {
     if !user_exists(conn, name)? {
-        log::error!("User '{}' does not exist.", name);
+        tracing::error!("User '{}' does not exist.", name);
         return Ok(());
     }
     let solde = calculate_solde(name)?;
@@ -116,7 +116,7 @@ pub fn create_transaction(
     optional_msg: &str,
 ) -> Result<()> {
     if from_user != NULL && calculate_solde(from_user)? < amount {
-        log::error!(
+        tracing::error!(
             "Insufficient funds: '{}' has less than {}.",
             from_user,
             amount
@@ -153,7 +153,7 @@ pub fn deposit(
     source_node: &str,
 ) -> Result<()> {
     if amount < 0.0 {
-        log::error!("Negative deposit amount: {}", amount);
+        tracing::error!("Negative deposit amount: {}", amount);
         return Err(rusqlite::Error::InvalidQuery);
     }
     create_transaction(
@@ -175,7 +175,7 @@ pub fn withdraw(
     source_node: &str,
 ) -> Result<()> {
     if amount < 0.0 {
-        log::error!("Negative withdrawal amount: {}", amount);
+        tracing::error!("Negative withdrawal amount: {}", amount);
         return Err(rusqlite::Error::InvalidQuery);
     }
     create_transaction(
@@ -252,7 +252,7 @@ pub fn refund_transaction(
             "Refund",
         )?;
     } else {
-        log::error!(
+        tracing::error!(
             "No transaction found at time {} from node {}",
             transac_time,
             node
@@ -267,10 +267,10 @@ pub fn print_users(conn: &Connection) -> Result<()> {
         Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
     })?;
 
-    log::info!("-- Users --");
+    println!("-- Users --");
     for user in users {
         let (name, solde) = user?;
-        log::info!("{}: {:.2}", name, solde);
+        println!("{}: {:.2}", name, solde);
     }
     Ok(())
 }
@@ -300,17 +300,12 @@ pub fn print_transactions(conn: &Connection) -> Result<()> {
         ))
     })?;
 
-    log::info!("-- Transactions --");
+    println!("-- Transactions --");
     for tx in txs {
         let (from, to, amount, time, node, msg) = tx?;
-        log::info!(
+        println!(
             "{} -> {} | {:.2} | time: {} | node: {} | msg: {:?}",
-            from,
-            to,
-            amount,
-            time,
-            node,
-            msg
+            from, to, amount, time, node, msg
         );
     }
     Ok(())
@@ -333,17 +328,12 @@ pub fn print_transaction_for_user(conn: &Connection, name: &str) -> Result<()> {
         ))
     })?;
 
-    log::info!("-- Transactions for user {} --", name);
+    println!("-- Transactions for user {} --", name);
     for tx in txs {
         let (from, to, amount, time, node, msg) = tx?;
-        log::info!(
+        println!(
             "{} -> {} | {:.2} | time: {} | node: {} | msg: {:?}",
-            from,
-            to,
-            amount,
-            time,
-            node,
-            msg
+            from, to, amount, time, node, msg
         );
     }
     Ok(())
