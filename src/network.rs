@@ -175,6 +175,29 @@ pub async fn handle_message(
                         state.get_clock().clone(),
                     )
                 };
+
+                if message.sender_id == site_id {
+                    if message.sender_addr.to_string() == local_addr {
+                        log::debug!(
+                            "Ignoring discovery message from self: {}",
+                            message.sender_id
+                        );
+                        continue;
+                    }
+                    log::debug!("Same site id : {}", message.sender_id);
+                    let _ = send_message(
+                        &message.sender_addr.to_string(),
+                        MessageInfo::Error(crate::message::ErrorCode::SiteIdAlreadyExists),
+                        None,
+                        NetworkMessageCode::Error,
+                        &local_addr,
+                        &site_id,
+                        clocks,
+                    )
+                    .await;
+                    continue;
+                }
+
                 log::debug!("Sending discovery response to: {}", message.sender_addr);
                 let _ = send_message(
                     &message.sender_addr.to_string(),
@@ -209,6 +232,34 @@ pub async fn handle_message(
             }
             NetworkMessageCode::Error => {
                 log::debug!("Error message received: {:?}", message);
+                match message.info {
+                    MessageInfo::Error(crate::message::ErrorCode::SiteIdAlreadyExists) => {
+                        log::error!("Error message received: SiteIdAlreadyExists");
+                        // FIXME : enhance the way we update site id
+                        // Increment the site_id based on the received one
+                        let mut state = LOCAL_APP_STATE.lock().await;
+                        let mut new_site_id = message.sender_id.clone();
+
+                        if let Some(last_char) = new_site_id.chars().last() {
+                            if last_char.is_alphabetic() {
+                                // Increment the letter if it's alphabetic
+                                let incremented_char = ((last_char as u8 + 1) as char).to_string();
+                                new_site_id.pop();
+                                new_site_id.push_str(&incremented_char);
+                            } else if last_char.is_numeric() {
+                                // Increment the number if it's numeric
+                                let incremented_number = last_char.to_digit(10).unwrap() + 1;
+                                new_site_id.pop();
+                                new_site_id.push_str(&incremented_number.to_string());
+                            }
+                        }
+                        state.change_site_id(&new_site_id);
+                        log::debug!("Updated site id to: {}", new_site_id);
+                    }
+                    _ => {
+                        log::error!("Unknown error message received: {:?}", message);
+                    }
+                }
             }
             NetworkMessageCode::Disconnect => {
                 log::debug!("Disconnect message received: {:?}", message);

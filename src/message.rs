@@ -65,6 +65,17 @@ pub enum MessageInfo {
     Pay(Pay),
     Refund(Refund),
     None,
+    Error(ErrorCode),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ErrorCode {
+    SiteIdAlreadyExists,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Error {
+    pub code: ErrorCode,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
