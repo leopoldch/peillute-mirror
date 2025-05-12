@@ -140,6 +140,9 @@ async fn main_loop(
 ) {
     loop {
         tokio::select! {
+            line = lines.next_line() => {
+                let _ = control::run_cli(line, &conn,local_lamport_time, node_name);
+            }
             Ok((stream, addr)) = listener.accept() => {
                 let _ = control::start_listening(stream, addr).await;
             }

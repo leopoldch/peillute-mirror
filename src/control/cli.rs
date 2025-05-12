@@ -1,13 +1,11 @@
-use super::db;
-use rusqlite::Connection;
-use std::io::{self as std_io, Write};
-
+#[cfg(feature = "server")]
 pub fn run_cli(
     line: Result<Option<String>, std::io::Error>,
-    conn: &Connection,
+    conn: &rusqlite::Connection,
     mut local_lamport_time: &mut i64,
     node_name: &str,
 ) -> u8 {
+    use std::io::{self as std_io, Write};
     match line {
         Ok(Some(cmd)) => {
             let command = parse_command(&cmd);
@@ -27,6 +25,7 @@ pub fn run_cli(
     }
 }
 
+#[cfg(feature = "server")]
 enum Command {
     CreateUser,
     UserAccounts,
@@ -41,6 +40,7 @@ enum Command {
     Unknown(String),
 }
 
+#[cfg(feature = "server")]
 fn parse_command(input: &str) -> Command {
     match input.trim() {
         "/create_user" => Command::CreateUser,
@@ -57,59 +57,13 @@ fn parse_command(input: &str) -> Command {
     }
 }
 
-fn handle_command(cmd: Command, conn: &Connection, lamport_time: &mut i64, node: &str) {
+#[cfg(feature = "server")]
+fn handle_command(cmd: Command, conn: &rusqlite::Connection, lamport_time: &mut i64, node: &str) {
+    use crate::control;
     match cmd {
         Command::CreateUser => {
             let name = prompt("Username");
-            db::create_user(conn, &name).unwrap();
-        }
-
-        Command::UserAccounts => {
-            db::print_users(conn).unwrap();
-        }
-
-        Command::PrintUserTransactions => {
-            let name = prompt("Username");
-            db::print_transaction_for_user(conn, &name).unwrap();
-        }
-
-        Command::PrintTransactions => {
-            db::print_transactions(conn).unwrap();
-        }
-
-        Command::Deposit => {
-            let name = prompt("Username");
-            let amount = prompt_parse::<f64>("Deposit amount");
-            db::deposit(conn, &name, amount, lamport_time, node).unwrap();
-        }
-
-        Command::Withdraw => {
-            let name = prompt("Username");
-            let amount = prompt_parse::<f64>("Withdraw amount");
-            db::withdraw(conn, &name, amount, lamport_time, node).unwrap();
-        }
-
-        Command::Transfer => {
-            let name = prompt("Username");
-            let amount = prompt_parse::<f64>("Transfer amount");
-            let _ = db::print_users(conn);
-            let beneficiary = prompt("Beneficiary");
-            db::create_transaction(conn, &name, &beneficiary, amount, lamport_time, node, "")
-                .unwrap();
-        }
-
-        Command::Pay => {
-            let name = prompt("Username");
-            let amount = prompt_parse::<f64>("Payment amount");
-            db::create_transaction(conn, &name, "NULL", amount, lamport_time, node, "").unwrap();
-        }
-
-        Command::Refund => {
-            let name = prompt("Username");
-            db::print_transaction_for_user(conn, &name).unwrap();
-            let transac_time = prompt_parse::<i64>("Lamport time");
-            let transac_node = prompt("Node");
-            db::refund_transaction(conn, transac_time, &transac_node, lamport_time, node).unwrap();
+            control::add_user(conn, &name).unwrap();
         }
 
         Command::Help => {
@@ -128,10 +82,16 @@ fn handle_command(cmd: Command, conn: &Connection, lamport_time: &mut i64, node:
         Command::Unknown(cmd) => {
             println!("❓ Unknown command: {}", cmd);
         }
+
+        _ => {
+            println!("❓ Unknown command - error cli");
+        }
     }
 }
 
+#[cfg(feature = "server")]
 fn prompt(label: &str) -> String {
+    use std::io::{self as std_io, Write};
     let mut input = String::new();
     print!("{label} > ");
     std_io::stdout().flush().unwrap();
@@ -139,6 +99,7 @@ fn prompt(label: &str) -> String {
     input.trim().to_string()
 }
 
+#[cfg(feature = "server")]
 fn prompt_parse<T: std::str::FromStr>(label: &str) -> T
 where
     T::Err: std::fmt::Debug,

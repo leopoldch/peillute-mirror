@@ -1,3 +1,4 @@
+mod cli;
 mod db;
 mod network;
 
@@ -6,3 +7,6 @@ pub use db::{add_user, get_users, init_db, is_database_initialized};
 
 #[cfg(feature = "server")]
 pub use network::{announce, start_listening};
+
+#[cfg(feature = "server")]
+pub use cli::run_cli;
