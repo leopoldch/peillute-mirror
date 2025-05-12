@@ -37,17 +37,16 @@ const MAIN_CSS: Asset = asset!("/assets/styling/main.css");
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     const LOW_PORT: u16 = 11000;
     const HIGH_PORT: u16 = 12000;
+    if LOW_PORT == HIGH_PORT || LOW_PORT > HIGH_PORT {
+        panic!("Invalid port range");
+    }
+    const SERVER_PORT_OFFSET: u16 = HIGH_PORT - LOW_PORT + 1;
 
     use data::{AppState, GLOBAL_APP_STATE};
     use std::io::Write;
     use tokio::io::{AsyncBufReadExt, BufReader};
 
     let args = Args::parse();
-    let address = dioxus::cli_config::fullstack_address_or_localhost();
-
-    let router = axum::Router::new().serve_dioxus_application(ServeConfigBuilder::default(), App);
-    let router = router.into_make_service();
-    let backend_listener = tokio::net::TcpListener::bind(address).await.unwrap();
 
     let conn: rusqlite::Connection = rusqlite::Connection::open("peillute.db").unwrap();
     if !control::is_database_initialized(&conn)? {
@@ -67,14 +66,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let site_ip: &str = &args.ip;
-    let local_addr: std::net::SocketAddr = format!("{}:{}", site_ip, selected_port).parse()?;
+    let network_addr: std::net::SocketAddr = format!("{}:{}", site_ip, selected_port).parse()?;
+    let server_adress: std::net::SocketAddr =
+        format!("{}:{}", site_ip, selected_port + SERVER_PORT_OFFSET).parse()?;
 
-    println!("Elected address: {}", local_addr);
+    let router = axum::Router::new().serve_dioxus_application(ServeConfigBuilder::default(), App);
+    let router = router.into_make_service();
+    let backend_listener = tokio::net::TcpListener::bind(server_adress).await.unwrap();
+
+    println!("Elected peer-network address: {}", network_addr);
+    println!("Elected server-client address: {}", server_adress);
 
     {
         let mut state = GLOBAL_APP_STATE.lock().await;
         state.site_id = args.site_id;
-        state.local_addr = local_addr;
+        state.local_addr = network_addr;
         state.nb_sites_on_network = args.peers.len();
         state.vector_clock = (0..args.peers.len())
             .map(|_| std::sync::atomic::AtomicU64::new(0))
@@ -84,9 +90,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     control::announce(site_ip, LOW_PORT, HIGH_PORT).await;
 
-    let network_listener_local_addr = local_addr.clone();
+    let network_listener_network_addr = network_addr.clone();
     let peer_listener: tokio::net::TcpListener =
-        tokio::net::TcpListener::bind(network_listener_local_addr).await?;
+        tokio::net::TcpListener::bind(network_listener_network_addr).await?;
 
     let node_name = "A"; // TODO: move to app state
     let mut local_lamport_time: i64 = 0;
@@ -149,10 +155,10 @@ async fn main_loop(
 // async fn disconnect() {
 //     use crate::data::LOCAL_APP_STATE;
 //     // lock just to get the local address and site id
-//     let (local_addr, site_id, peer_addrs, clock) = {
+//     let (network_addr, site_id, peer_addrs, clock) = {
 //         let state = LOCAL_APP_STATE.lock().await;
 //         (
-//             state.get_local_addr().to_string(),
+//             state.get_network_addr().to_string(),
 //             state.get_site_id().to_string(),
 //             state.get_peers(),
 //             state.get_clock().clone(),
@@ -179,7 +185,7 @@ async fn main_loop(
 //             message::MessageInfo::None,
 //             None,
 //             message::NetworkMessageCode::Disconnect,
-//             &local_addr,
+//             &network_addr,
 //             &site_id,
 //             clock.clone(),
 //         )
