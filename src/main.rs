@@ -32,7 +32,6 @@ enum Route {
 
 const FAVICON: Asset = asset!("/assets/logo.png");
 const MAIN_CSS: Asset = asset!("/assets/styling/main.css");
-
 #[cfg(feature = "server")]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -44,27 +43,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     use tokio::io::{AsyncBufReadExt, BufReader};
 
     let args = Args::parse();
-
-    // Get the address the backend should run on. If the CLI is running, the CLI proxies fullstack into the main address
-    // and we use the generated address the CLI gives us
     let address = dioxus::cli_config::fullstack_address_or_localhost();
 
-    // Set up the axum router for interaction between the frontend and the backend
-    let router = axum::Router::new()
-        // You can add a dioxus application to the router with the `serve_dioxus_application` method
-        // This will add a fallback route to the router that will serve your component and backend functions
-        .serve_dioxus_application(ServeConfigBuilder::default(), App);
-
+    let router = axum::Router::new().serve_dioxus_application(ServeConfigBuilder::default(), App);
     let router = router.into_make_service();
     let backend_listener = tokio::net::TcpListener::bind(address).await.unwrap();
 
-    // Instanciate our database connection and check if it's initialized
     let conn: rusqlite::Connection = rusqlite::Connection::open("peillute.db").unwrap();
     if !control::is_database_initialized(&conn)? {
         let _ = control::init_db(&conn);
     }
 
-    // setup peer to peer networking
     let port_range = LOW_PORT..=HIGH_PORT;
     let mut selected_port = args.port;
     if selected_port == 0 {
@@ -76,6 +65,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
+
     let site_ip: &str = &args.ip;
     let local_addr: std::net::SocketAddr = format!("{}:{}", site_ip, selected_port).parse()?;
 
@@ -98,30 +88,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let peer_listener: tokio::net::TcpListener =
         tokio::net::TcpListener::bind(network_listener_local_addr).await?;
 
-    let node_name = "A"; // TODO :should be in app state and define by discovery
-    let mut local_lamport_time: i64 = 0; // TODO :should use app state
+    let node_name = "A"; // TODO: move to app state
+    let mut local_lamport_time: i64 = 0;
 
-    let stdin: tokio::io::Stdin = tokio::io::stdin();
-    let reader: tokio::io::BufReader<tokio::io::Stdin> = tokio::io::BufReader::new(stdin);
-    let mut lines: tokio::io::Lines<BufReader<tokio::io::Stdin>> = reader.lines();
+    let stdin = tokio::io::stdin();
+    let reader = tokio::io::BufReader::new(stdin);
+    let mut lines = reader.lines();
 
-    println!("Welcome on peillute, write /help to get the command list.");
     print!("> ");
     std::io::stdout().flush().unwrap();
 
     let main_loop_app_state = GLOBAL_APP_STATE.clone();
-    let _ = main_loop(
+    let conn_arc = std::sync::Arc::new(conn);
+
+    // Spawn the web server
+    let server_task = tokio::spawn(async move {
+        axum::serve(backend_listener, router).await.unwrap();
+    });
+
+    // Run main loop directly
+    main_loop(
         main_loop_app_state,
         &mut lines,
-        &conn,
+        &conn_arc,
         &mut local_lamport_time,
         node_name,
         peer_listener,
     )
     .await;
 
-    // Finally, we can launch the backend
-    axum::serve(backend_listener, router).await.unwrap();
+    // Ensure the server task finishes cleanly if ever reached
+    server_task.await?;
 
     Ok(())
 }
@@ -130,7 +127,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 async fn main_loop(
     _state: std::sync::Arc<tokio::sync::Mutex<crate::data::AppState>>,
     lines: &mut tokio::io::Lines<tokio::io::BufReader<tokio::io::Stdin>>,
-    conn: &rusqlite::Connection,
+    conn: &std::sync::Arc<rusqlite::Connection>,
     local_lamport_time: &mut i64,
     node_name: &str,
     listener: tokio::net::TcpListener,
@@ -141,7 +138,6 @@ async fn main_loop(
                 let _ = control::start_listening(stream, addr).await;
             }
             _ = tokio::signal::ctrl_c() => {
-                // disconnect().await;
                 println!("👋 Bye !");
                 std::process::exit(0);
             }
