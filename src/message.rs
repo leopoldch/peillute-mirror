@@ -66,14 +66,25 @@ pub enum MessageInfo {
     Refund(Refund),
     None,
     Error(ErrorCode),
+    IdHasChanged(IdHasChanged),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct IdHasChanged {
+    pub old_site_id: String,
+}
+impl IdHasChanged {
+    pub fn new(old_site_id: String) -> Self {
+        Self { old_site_id }
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum ErrorCode {
     SiteIdAlreadyExists,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct Error {
     pub code: ErrorCode,
 }

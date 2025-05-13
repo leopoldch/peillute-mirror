@@ -12,7 +12,7 @@ const PORT_OFFSET: u16 = HIGH_PORT - LOW_PORT + 1;
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    #[arg(long, default_value_t = std::process::id().to_string())]
+    #[arg(long, default_value_t = String::from("A"))]
     site_id: String,
     #[arg(long, default_value_t = 0)]
     port: u16,

@@ -167,8 +167,7 @@ pub async fn handle_message(
         match message.code {
             NetworkMessageCode::Discovery => {
                 let (local_addr, site_id, clocks) = {
-                    let mut state = LOCAL_APP_STATE.lock().await;
-                    state.add_peer(message.sender_id.as_str(), message.sender_addr);
+                    let state = LOCAL_APP_STATE.lock().await;
                     (
                         state.get_local_addr().to_string(),
                         state.get_site_id().to_string(),
@@ -192,23 +191,67 @@ pub async fn handle_message(
                         NetworkMessageCode::Error,
                         &local_addr,
                         &site_id,
-                        clocks,
+                        clocks.clone(),
                     )
                     .await;
                     continue;
                 }
 
-                log::debug!("Sending discovery response to: {}", message.sender_addr);
-                let _ = send_message(
-                    &message.sender_addr.to_string(),
-                    MessageInfo::None,
-                    None,
-                    NetworkMessageCode::Acknowledgment,
-                    &local_addr,
-                    &site_id,
-                    clocks,
-                )
-                .await;
+                let code = {
+                    // site ID OK : add the peer
+                    let mut state = LOCAL_APP_STATE.lock().await;
+                    if let MessageInfo::IdHasChanged(id_has_changed) = &message.info {
+                        let old_site_id = &id_has_changed.old_site_id;
+                        log::debug!(
+                            "Changing site ID from : {} to {}",
+                            old_site_id,
+                            message.sender_id
+                        );
+                        state.add_peer(&message.sender_id, message.sender_addr);
+                        let err = state.change_peer_id(old_site_id, message.sender_id.as_str());
+                        err
+                    } else {
+                        state.add_peer(message.sender_id.as_str(), message.sender_addr);
+                        0
+                    }
+                };
+
+                match code {
+                    -2 => {
+                        // site ID already exists
+                        // send an error message
+                        log::debug!("Site ID already exists: {}", message.sender_id);
+                        let _ = send_message(
+                            &message.sender_addr.to_string(),
+                            MessageInfo::Error(crate::message::ErrorCode::SiteIdAlreadyExists),
+                            None,
+                            NetworkMessageCode::Error,
+                            &local_addr,
+                            &site_id,
+                            clocks.clone(),
+                        )
+                        .await;
+                        continue;
+                    }
+                    _ => {
+                        // OK
+                        let mut state = LOCAL_APP_STATE.lock().await;
+                        state.add_peer(message.sender_id.as_str(), message.sender_addr);
+                        // needs to send also the acknowledgment
+                        // in order to update the peer list of the sender
+                        log::debug!("Sending discovery response to: {}", message.sender_addr);
+                        let _ = send_message(
+                            &message.sender_addr.to_string(),
+                            MessageInfo::None,
+                            None,
+                            NetworkMessageCode::Acknowledgment,
+                            &local_addr,
+                            &site_id,
+                            clocks.clone(),
+                        )
+                        .await;
+                    }
+                }
             }
             NetworkMessageCode::Transaction => {
                 log::debug!("Transaction message received: {:?}", message);
@@ -232,12 +275,17 @@ pub async fn handle_message(
             }
             NetworkMessageCode::Error => {
                 log::debug!("Error message received: {:?}", message);
+                {
+                    // if peer unknown, add it
+                    let mut state = LOCAL_APP_STATE.lock().await;
+                    state.add_peer(message.sender_id.as_str(), message.sender_addr);
+                }
                 match message.info {
                     MessageInfo::Error(crate::message::ErrorCode::SiteIdAlreadyExists) => {
                         log::error!("Error message received: SiteIdAlreadyExists");
                         // FIXME : enhance the way we update site id
                         // Increment the site_id based on the received one
-                        let mut state = LOCAL_APP_STATE.lock().await;
+
                         let mut new_site_id = message.sender_id.clone();
 
                         if let Some(last_char) = new_site_id.chars().last() {
@@ -253,8 +301,25 @@ pub async fn handle_message(
                                 new_site_id.push_str(&incremented_number.to_string());
                             }
                         }
-                        state.change_site_id(&new_site_id);
+                        let old_site_id = {
+                            let mut state = LOCAL_APP_STATE.lock().await;
+                            let old_site_id = state.get_site_id().to_string();
+                            state.change_site_id(&new_site_id);
+                            old_site_id
+                        };
+
                         log::debug!("Updated site id to: {}", new_site_id);
+                        // notify the other peers the site ID has changed
+                        // send a discovery message to all peers
+                        send_message_to_all(
+                            None,
+                            NetworkMessageCode::Discovery,
+                            MessageInfo::IdHasChanged(crate::message::IdHasChanged::new(
+                                old_site_id,
+                            )),
+                        )
+                        .await
+                        .unwrap();
                     }
                     _ => {
                         log::error!("Unknown error message received: {:?}", message);

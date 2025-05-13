@@ -12,6 +12,23 @@ impl Clock {
         }
     }
 
+    pub fn change_peer_id(&mut self, old_site_id: &str, new_site_id: &str) -> i64 {
+        if new_site_id == old_site_id {
+            return 0;
+        }
+
+        if self.vector_clock.contains_key(new_site_id) {
+            return -2; // cannot change to an existing site_id
+        }
+
+        if let Some(value) = self.vector_clock.remove(old_site_id) {
+            self.vector_clock.insert(new_site_id.to_string(), value);
+            0 // success
+        } else {
+            -1 // old site_id not found
+        }
+    }
+
     pub fn add_peer(&mut self, site_id: &str) {
         if !self.vector_clock.contains_key(site_id) {
             self.vector_clock.insert(site_id.to_string(), 0);

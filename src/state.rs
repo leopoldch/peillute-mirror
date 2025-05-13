@@ -41,6 +41,10 @@ impl AppState {
         }
     }
 
+    pub fn change_peer_id(&mut self, old_site_id: &str, new_site_id: &str) -> i64 {
+        return self.clocks.change_peer_id(old_site_id, new_site_id);
+    }
+
     pub fn remove_peer(&mut self, addr: std::net::SocketAddr) {
         if let Some(pos) = self.peer_addrs.iter().position(|x| *x == addr) {
             self.peer_addrs.remove(pos);
