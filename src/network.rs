@@ -307,7 +307,12 @@ pub async fn handle_message(
                         // FIXME : enhance the way we update site id
                         // Increment the site_id based on the received one
 
-                        let mut new_site_id = message.sender_id.clone();
+                        let old_site_id = {
+                            let state = LOCAL_APP_STATE.lock().await;
+                            let old_site_id = state.get_site_id().to_string();
+                            old_site_id
+                        };
+                        let mut new_site_id = old_site_id.clone();
 
                         if let Some(last_char) = new_site_id.chars().last() {
                             if last_char.is_alphabetic() {
@@ -322,16 +327,15 @@ pub async fn handle_message(
                                 new_site_id.push_str(&incremented_number.to_string());
                             }
                         }
-                        let old_site_id = {
-                            let mut state = LOCAL_APP_STATE.lock().await;
-                            let old_site_id = state.get_site_id().to_string();
-                            state.change_site_id(&new_site_id);
-                            old_site_id
-                        };
-
                         log::debug!("Updated site id to: {}", new_site_id);
                         // notify the other peers the site ID has changed
                         // send a discovery message to all peers
+
+                        {
+                            let mut state = LOCAL_APP_STATE.lock().await;
+                            state.change_site_id(&new_site_id);
+                        }
+
                         send_message_to_all(
                             None,
                             NetworkMessageCode::Discovery,
