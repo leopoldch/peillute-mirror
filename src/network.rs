@@ -166,6 +166,26 @@ pub async fn handle_message(
 
         match message.code {
             NetworkMessageCode::Discovery => {
+                async fn respond(
+                    target: &str,
+                    info: MessageInfo,
+                    code: NetworkMessageCode,
+                    local_addr: &str,
+                    site_id: &str,
+                    clocks: &crate::clock::Clock,
+                ) {
+                    let _ = send_message(
+                        target,
+                        info,
+                        None,
+                        code,
+                        local_addr,
+                        site_id,
+                        clocks.clone(),
+                    )
+                    .await;
+                }
+
                 let (local_addr, site_id, clocks) = {
                     let state = LOCAL_APP_STATE.lock().await;
                     (
@@ -175,84 +195,85 @@ pub async fn handle_message(
                     )
                 };
 
+                // Gérer le cas d'un message provenant d'un site avec le même ID que nous
                 if message.sender_id == site_id {
-                    if message.sender_addr.to_string() == local_addr {
+                    let is_self = message.sender_addr.to_string() == local_addr;
+
+                    if let MessageInfo::IdHasChanged(_) = &message.info {
+                        log::debug!(
+                            "Received IdHasChanged from {}, treating as resolution attempt.",
+                            message.sender_id
+                        );
+                    } else if is_self {
                         log::debug!(
                             "Ignoring discovery message from self: {}",
                             message.sender_id
                         );
-                        continue;
-                    }
-                    log::debug!("Same site id : {}", message.sender_id);
-                    let _ = send_message(
-                        &message.sender_addr.to_string(),
-                        MessageInfo::Error(crate::message::ErrorCode::SiteIdAlreadyExists),
-                        None,
-                        NetworkMessageCode::Error,
-                        &local_addr,
-                        &site_id,
-                        clocks.clone(),
-                    )
-                    .await;
-                    continue;
-                }
-
-                let code = {
-                    // site ID OK : add the peer
-                    let mut state = LOCAL_APP_STATE.lock().await;
-                    if let MessageInfo::IdHasChanged(id_has_changed) = &message.info {
-                        let old_site_id = &id_has_changed.old_site_id;
-                        log::debug!(
-                            "Changing site ID from : {} to {}",
-                            old_site_id,
-                            message.sender_id
-                        );
-                        state.add_peer(&message.sender_id, message.sender_addr);
-                        let err = state.change_peer_id(old_site_id, message.sender_id.as_str());
-                        err
                     } else {
-                        state.add_peer(message.sender_id.as_str(), message.sender_addr);
-                        0
-                    }
-                };
-
-                match code {
-                    -2 => {
-                        // site ID already exists
-                        // send an error message
-                        log::debug!("Site ID already exists: {}", message.sender_id);
-                        let _ = send_message(
+                        log::debug!("Same site id detected: {}", message.sender_id);
+                        // do not add clock to the local clock
+                        // and peer to the local peer list yet
+                        respond(
                             &message.sender_addr.to_string(),
                             MessageInfo::Error(crate::message::ErrorCode::SiteIdAlreadyExists),
-                            None,
                             NetworkMessageCode::Error,
                             &local_addr,
                             &site_id,
-                            clocks.clone(),
-                        )
-                        .await;
-                        continue;
-                    }
-                    _ => {
-                        // OK
-                        let mut state = LOCAL_APP_STATE.lock().await;
-                        state.add_peer(message.sender_id.as_str(), message.sender_addr);
-                        // needs to send also the acknowledgment
-                        // in order to update the peer list of the sender
-                        log::debug!("Sending discovery response to: {}", message.sender_addr);
-                        let _ = send_message(
-                            &message.sender_addr.to_string(),
-                            MessageInfo::None,
-                            None,
-                            NetworkMessageCode::Acknowledgment,
-                            &local_addr,
-                            &site_id,
-                            clocks.clone(),
+                            &clocks,
                         )
                         .await;
                     }
+                    continue;
+                }
+
+                let mut state = LOCAL_APP_STATE.lock().await;
+                let mut send_ack = true;
+                let mut conflict = false;
+
+                if let MessageInfo::IdHasChanged(change) = &message.info {
+                    log::debug!(
+                        "Changing site ID from {} to {}",
+                        change.old_site_id,
+                        message.sender_id
+                    );
+                    let result = state.change_peer_id(&change.old_site_id, &message.sender_id);
+                    state.add_peer(&message.sender_id, message.sender_addr);
+                    if result == -2 {
+                        conflict = true;
+                    }
+                } else {
+                    log::debug!("Adding new peer: {}", message.sender_id);
+                    state.add_peer(&message.sender_id, message.sender_addr);
+                }
+
+                if conflict {
+                    log::debug!("Site ID already exists: {}", message.sender_id);
+                    respond(
+                        &message.sender_addr.to_string(),
+                        MessageInfo::Error(crate::message::ErrorCode::SiteIdAlreadyExists),
+                        NetworkMessageCode::Error,
+                        &local_addr,
+                        &site_id,
+                        &clocks,
+                    )
+                    .await;
+                    send_ack = false;
+                }
+
+                if send_ack {
+                    log::debug!("Sending discovery response to: {}", message.sender_addr);
+                    respond(
+                        &message.sender_addr.to_string(),
+                        MessageInfo::None,
+                        NetworkMessageCode::Acknowledgment,
+                        &local_addr,
+                        &site_id,
+                        &clocks,
+                    )
+                    .await;
                 }
             }
+
             NetworkMessageCode::Transaction => {
                 log::debug!("Transaction message received: {:?}", message);
                 #[allow(unused)]
