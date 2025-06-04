@@ -315,44 +315,77 @@ pub async fn handle_message(
                 }
             }
             NetworkMessageCode::TransactionAcknowledgement => {
-                // Message rouge
+                use crate::message::MessageInfo;
+            
+                // ── 1. Accès exclusif à l'état ─────────────────────────────────────
                 let mut state = LOCAL_APP_STATE.lock().await;
-
-                let nb_neighbours = state.nb_neighbors;
-                let current_value = state.nb_of_attended_neighbors.get(&message.message_initiator_id).copied().unwrap_or(nb_neighbours);
-                state.nb_of_attended_neighbors.insert(message.message_initiator_id.clone(), current_value - 1);
-
-                if state.nb_of_attended_neighbors.get(&message.message_initiator_id.clone()).copied().unwrap_or(-1) == 0 {
-                    // site initateur
-                    if state.parent_addr.get(&message.message_initiator_id.clone()).copied().unwrap_or("99.99.99.99:0".parse().unwrap()) == state.local_addr {
-                        // diffusion terminée
-                        // Réinitialisation
-                        let peer_count = state.in_use_neighbors.len();
-                        state.nb_of_attended_neighbors.insert(
-                            message.message_initiator_id.clone(),
-                            peer_count as i64,
-                        );
-                        state.parent_addr.insert(
-                            message.message_initiator_id.clone(),
-                            "0.0.0.0:0".parse().unwrap()
-                        );
-                        log::error!("Diffusion terminée et réussie !")
-
-                    }else{
-                        send_message(state.get_parent_addr(message.message_initiator_id.clone()),
-                                     MessageInfo::None,
-                                     None,
-                                     NetworkMessageCode::TransactionAcknowledgement,
-                                     state.get_local_addr().parse().unwrap(),
-                                     &state.get_site_id().to_string(),
-                                     &message.message_initiator_id,
-                                     message.message_initiator_addr,
-                                     state.get_clock().clone()
-                        ).await?;
-                    }
+            
+                let initiator_id = message.message_initiator_id.clone();
+            
+                // a) décrémente le compteur restant
+                let remaining = state
+                    .nb_of_attended_neighbors
+                    .get(&initiator_id)
+                    .copied()
+                    .unwrap_or(state.nb_neighbors)
+                    .saturating_sub(1);
+            
+                state
+                    .nb_of_attended_neighbors
+                    .insert(initiator_id.clone(), remaining);
+            
+                // b) récupère le parent AVANT un éventuel reset
+                let parent_addr = state
+                    .parent_addr
+                    .get(&initiator_id)
+                    .copied()
+                    .unwrap_or(state.local_addr);
+            
+                // c) Dois-je remettre mon état à zéro ?
+                if remaining == 0 {
+                    let nb_tot = state.nb_neighbors;                   // <- capture avant l'insert
+                    state.nb_of_attended_neighbors
+                        .insert(initiator_id.clone(), nb_tot);
+                    state.parent_addr.insert(
+                        message.message_initiator_id.clone(),
+                        "0.0.0.0:0".parse().unwrap(),
+                    );
+                    log::debug!(
+                        "Nœud {} a terminé sa part pour la vague {}",
+                        state.site_id,
+                        message.message_initiator_id
+                    );
+                }
+            
+                // 3. Relais de l’ACK à mon parent si je ne suis pas la racine
+                let parent = state.parent_addr
+                    .get(&message.message_initiator_id)
+                    .copied()
+                    .unwrap_or(state.local_addr);
+            
+                if parent != state.local_addr && parent.port() != 0 {
+                    send_message(
+                        parent,
+                        MessageInfo::None,
+                        None,
+                        NetworkMessageCode::TransactionAcknowledgement,
+                        state.local_addr,
+                        &state.site_id,
+                        &message.message_initiator_id,
+                        message.message_initiator_addr,
+                        state.clocks.clone(),
+                    )
+                    .await?;
+                } else {
+                    // Racine : aucun parent valide → fin de la vague pour moi
+                    log::debug!(
+                        "Racine {} : diffusion terminée pour l’initiateur {}",
+                        state.site_id,
+                        message.message_initiator_id
+                    );
                 }
             }
-
+            
             NetworkMessageCode::Error => {
                 log::debug!("Error message received: {:?}", message);
             }
@@ -427,7 +460,11 @@ pub async fn send_message(
 ) -> Result<(), Box<dyn std::error::Error>> {
     use crate::message::Message;
     use rmp_serde::encode;
-
+    
+    if address.ip().is_unspecified() || address.port() == 0 {
+        log::warn!("Skipping invalid peer address {}", address);
+        return Ok(());
+    }
 
     if code == crate::message::NetworkMessageCode::Transaction && command.is_none() {
         log::error!("Command is None for Transaction message");
@@ -527,10 +564,11 @@ pub async fn diffuse_message(
 
     };
 
-
-
-
     for peer_addr in peer_addrs {
+        if peer_addr.ip().is_unspecified() || peer_addr.port() == 0 {
+            log::warn!("Skipping invalid peer address {}", peer_addr);
+            continue;
+        }
         let peer_addr_str = peer_addr.to_string();
         if peer_addr != parent_address {
             log::debug!("Sending message to: {}", peer_addr_str);
