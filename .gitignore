@@ -3,3 +3,4 @@
 target
 *.db
 snapshot*.json
+local_state.json

@@ -13,14 +13,15 @@ mod message;
 mod network;
 mod snapshot;
 mod state;
+mod utils;
 
 /// Command-line arguments for configuring the Peillute application
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// Unique identifier for this site in the network
-    #[arg(long, default_value_t = std::process::id().to_string())]
-    site_id: String,
+    #[arg(long)]
+    site_id: Option<String>,
 
     /// Port number for peer-to-peer communication
     #[arg(long, default_value_t = 0)]
@@ -75,20 +76,30 @@ async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
     let client_server_interaction_addr: SocketAddr =
         format!("{}:{}", site_ip, selected_port + PORT_OFFSET).parse()?;
 
-    {
-        let mut state = LOCAL_APP_STATE.lock().await;
-        state.site_id = args.site_id;
-        state.local_addr = peer_interaction_addr;
-        state.nb_sites_on_network = args.peers.len();
-        let site_id = state.site_id.clone();
-        state.clocks.set_site_id(&site_id);
+    let process_id = std::process::id();
+    let mac_address = utils::get_mac_address().unwrap_or_else(|| "UNKNOWN".to_string());
+    let generated_id = format!("{}_{}", mac_address, process_id);
 
-        let mut peers_addrs = Vec::new();
-        for peer in args.peers {
-            let peer_addr = peer.parse::<SocketAddr>()?;
-            peers_addrs.push(peer_addr);
+    let site_id = args.site_id.unwrap_or(generated_id.clone());
+
+    let mut peers_addrs = Vec::new();
+    for peer in &args.peers {
+        let peer_addr = peer.parse::<SocketAddr>()?;
+        peers_addrs.push(peer_addr);
+    }
+    let nb_sites_on_network = args.peers.len();
+
+    // if we load an existing site, we will use the site_id from the local state
+    if !utils::reload_existing_site(peer_interaction_addr, nb_sites_on_network, peers_addrs.clone()).await {
+        {
+            let mut state = LOCAL_APP_STATE.lock().await;
+            state.site_id = site_id.clone();
+            state.local_addr = peer_interaction_addr;
+            state.nb_sites_on_network = nb_sites_on_network;
+            state.clocks.set_site_id(&site_id.clone());
+            state.peer_addrs = peers_addrs;
         }
-        state.peer_addrs = peers_addrs;
+        utils::save_local_state().await;
     }
 
     let network_listener_local_addr = peer_interaction_addr.clone();
