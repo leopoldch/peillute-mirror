@@ -23,12 +23,12 @@ pub struct Transaction {
     pub vector_clock: std::collections::HashMap<String, i64>,
 }
 
-#[allow(unused)]
+#[allow(unused_imports)]
 use clap::Parser;
 #[cfg(feature = "server")]
 lazy_static::lazy_static! {
     pub static ref DB_CONN: std::sync::Mutex<rusqlite::Connection> =
-        std::sync::Mutex::new(rusqlite::Connection::open(format!("peillute_{}.db", super::Args::parse().db_id)).unwrap());
+        std::sync::Mutex::new(rusqlite::Connection::open(format!("peillute_{}.db", super::Args::parse().cli_db_id)).unwrap());
 }
 
 #[cfg(feature = "server")]
@@ -104,6 +104,8 @@ pub fn init_db() -> rusqlite::Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "server")]
+/// Update the local state of the site
 pub fn update_local_state(site_id: &str, clock: crate::clock::Clock) -> rusqlite::Result<()> {
     use rusqlite::params;
 
@@ -128,6 +130,38 @@ pub fn update_local_state(site_id: &str, clock: crate::clock::Clock) -> rusqlite
     Ok(())
 }
 
+#[cfg(feature = "server")]
+/// Update the database with a snapshot
+pub fn update_db_with_snapshot(
+    snapshot: &crate::snapshot::GlobalSnapshot,
+    vector_clock: &std::collections::HashMap<String, i64>,
+) {
+    log::info!("Applying snapshot to database");
+
+    if snapshot.missing.is_empty() {
+        log::info!("No missing transactions, nothing to do");
+        return;
+    }
+
+    for txs in snapshot.missing.values() {
+        for tx in txs {
+            let optional_msg = "";
+
+            let _ = crate::db::create_transaction(
+                &tx.from_user,
+                &tx.to_user,
+                (tx.amount_in_cent as f64) / 100.0,
+                &tx.lamport_time,
+                &tx.source_node,
+                &optional_msg,
+                vector_clock,
+            );
+        }
+    }
+}
+
+#[cfg(feature = "server")]
+/// Get the local state of the site
 pub fn get_local_state() -> rusqlite::Result<(String, crate::clock::Clock)> {
     use rusqlite::params;
     let conn = DB_CONN.lock().unwrap();
@@ -208,6 +242,7 @@ pub fn create_user(unique_name: &str) -> rusqlite::Result<()> {
     }
 
     {
+        log::debug!("Ajout de l'utilisateur {}", unique_name);
         let conn = DB_CONN.lock().unwrap();
         conn.execute(
             "INSERT INTO User (unique_name, solde) VALUES (?1, 0)",
@@ -449,27 +484,6 @@ pub fn withdraw(
         lamport_time,
         source_node,
         "Withdraw",
-        vector_clock,
-    )
-}
-
-#[cfg(feature = "server")]
-#[allow(unused)]
-pub fn create_user_with_solde(
-    unique_name: &str,
-    solde: f64,
-    lamport_time: &i64,
-    source_node: &str,
-    vector_clock: &std::collections::HashMap<String, i64>,
-) -> rusqlite::Result<()> {
-    create_user(unique_name)?;
-    create_transaction(
-        NULL,
-        unique_name,
-        solde,
-        lamport_time,
-        source_node,
-        "Initial deposit",
         vector_clock,
     )
 }

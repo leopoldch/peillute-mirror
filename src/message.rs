@@ -34,48 +34,18 @@ pub enum NetworkMessageCode {
     Error,
     /// Message for gracefully disconnecting from the network
     Disconnect,
-    /// Message for synchronizing state between nodes
-    Sync,
     /// Message requesting a state snapshot
     SnapshotRequest,
     /// Message containing a state snapshot
     SnapshotResponse,
-}
-
-#[cfg(feature = "server")]
-impl NetworkMessageCode {
-    #[allow(unused)]
-    /// Returns the string representation of the message code
-    pub fn code(&self) -> &'static str {
-        match self {
-            NetworkMessageCode::Discovery => "discovery",
-            NetworkMessageCode::Transaction => "transaction",
-            NetworkMessageCode::TransactionAcknowledgement => "transaction_acknowledgement",
-            NetworkMessageCode::Acknowledgment => "acknowledgment",
-            NetworkMessageCode::Error => "error",
-            NetworkMessageCode::Disconnect => "disconnect",
-            NetworkMessageCode::Sync => "sync",
-            NetworkMessageCode::SnapshotRequest => "snapshot_request",
-            NetworkMessageCode::SnapshotResponse => "snapshot_response",
-        }
-    }
-
-    #[allow(unused)]
-    /// Converts a string code to a NetworkMessageCode variant
-    pub fn from_code(code: &str) -> Option<Self> {
-        match code {
-            "discovery" => Some(NetworkMessageCode::Discovery),
-            "transaction" => Some(NetworkMessageCode::Transaction),
-            "transaction_acknowledgement" => Some(NetworkMessageCode::TransactionAcknowledgement),
-            "acknowledgment" => Some(NetworkMessageCode::Acknowledgment),
-            "error" => Some(NetworkMessageCode::Error),
-            "disconnect" => Some(NetworkMessageCode::Disconnect),
-            "sync" => Some(NetworkMessageCode::Sync),
-            "snapshot_request" => Some(NetworkMessageCode::SnapshotRequest),
-            "snapshot_response" => Some(NetworkMessageCode::SnapshotResponse),
-            _ => None,
-        }
-    }
+    /// Request to acquire the global mutex
+    AcquireMutex,
+    /// Request to release the global mutex
+    ReleaseGlobalMutex,
+    /// Acknowledgment of the global mutex acquisition
+    AckGlobalMutex,
+    /// Acknowledgment of the global mutex acquisition
+    AckReleaseGlobalMutex,
 }
 
 #[cfg(feature = "server")]
@@ -118,8 +88,33 @@ pub enum MessageInfo {
     Refund(Refund),
     /// Response to a snapshot request
     SnapshotResponse(SnapshotResponse),
+    /// Initiate a critical section
+    AcquireMutex(AcquireMutexPayload),
+    /// Release a critical section
+    ReleaseMutex(ReleaseMutexPayload),
+    /// Acknowledge a critical section
+    AckMutex(AckMutexPayload),
     /// No payload
     None,
+}
+
+#[cfg(feature = "server")]
+/// Payload for the AcquireMutex message
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+pub struct AcquireMutexPayload;
+
+#[cfg(feature = "server")]
+/// Payload for the ReleaseMutex message
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[cfg(feature = "server")]
+/// Payload for the AckMutex message
+pub struct ReleaseMutexPayload;
+
+#[cfg(feature = "server")]
+/// Payload for the AckMutex message
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+pub struct AckMutexPayload {
+    pub clock: i64,
 }
 
 #[cfg(feature = "server")]
@@ -134,6 +129,7 @@ pub struct SnapshotResponse {
     pub tx_log: Vec<crate::snapshot::TxSummary>,
 }
 
+#[cfg(feature = "server")]
 /// Request to create a new user
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct CreateUser {
@@ -285,17 +281,5 @@ mod tests {
             code: NetworkMessageCode::Transaction,
         };
         assert!(format!("{:?}", message).contains("Message { sender_id: \"A\""));
-    }
-
-    #[test]
-    fn test_network_message_code_conversion() {
-        let code = NetworkMessageCode::Transaction;
-        assert_eq!(code.code(), "transaction");
-
-        let from_code = NetworkMessageCode::from_code("transaction");
-        assert_eq!(from_code, Some(NetworkMessageCode::Transaction));
-
-        let invalid_code = NetworkMessageCode::from_code("invalid");
-        assert_eq!(invalid_code, None);
     }
 }

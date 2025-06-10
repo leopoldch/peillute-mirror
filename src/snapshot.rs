@@ -21,6 +21,18 @@ pub struct TxSummary {
 }
 
 #[cfg(feature = "server")]
+/// Snapshot mode
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq)]
+pub enum SnapshotMode {
+    /// When all snapshots are received, we can create a global snapshot and save the file
+    FileMode,
+    /// When all snapshot are received, we can create a global snapshot and send it to the network
+    NetworkMode,
+    /// When all snapshot are received, we can create a global snapshot and apply it to the local state
+    SyncMode,
+}
+
+#[cfg(feature = "server")]
 impl From<&crate::db::Transaction> for TxSummary {
     fn from(tx: &crate::db::Transaction) -> Self {
         Self {
@@ -83,18 +95,24 @@ impl GlobalSnapshot {
 /// Manages the snapshot collection process
 pub struct SnapshotManager {
     /// Number of snapshots expected to be collected
-    pub expected: i64,
+    pub expected: usize,
     /// Vector of received local snapshots
     pub received: Vec<LocalSnapshot>,
+    /// Path to the last snapshot saved
+    pub path: Option<std::path::PathBuf>,
+    /// Snapshot mode
+    pub mode: SnapshotMode,
 }
 
 #[cfg(feature = "server")]
 impl SnapshotManager {
     /// Creates a new snapshot manager expecting the given number of snapshots
-    pub fn new(expected: i64) -> Self {
+    pub fn new(expected: usize) -> Self {
         Self {
             expected,
             received: Vec::new(),
+            path: None,
+            mode: SnapshotMode::FileMode,
         }
     }
 
@@ -104,15 +122,16 @@ impl SnapshotManager {
     /// and they are consistent. If the snapshots are inconsistent, it will
     /// attempt to find a consistent subset by backtracking to the minimum
     /// vector clock values.
+    /// all_received is defined by the state of our wave diffusion protocol
     pub fn push(&mut self, resp: crate::message::SnapshotResponse) -> Option<GlobalSnapshot> {
-        log::debug!("Received snapshot from site {}.", resp.site_id);
+        log::debug!("Adding snapshot {} in the manager.", resp.site_id);
         self.received.push(LocalSnapshot {
             site_id: resp.site_id.clone(),
             vector_clock: resp.clock.get_vector_clock_map().clone(),
             tx_log: resp.tx_log.into_iter().collect(),
         });
 
-        if (self.received.len() as i64) < self.expected {
+        if self.received.len() < self.expected {
             log::debug!("{}/{} sites received.", self.received.len(), self.expected);
             return None;
         }
@@ -194,41 +213,56 @@ impl SnapshotManager {
 /// Initiates a new snapshot process
 ///
 /// Collects the local transaction log and sends snapshot requests to all peers.
-pub async fn start_snapshot() -> Result<(), Box<dyn std::error::Error>> {
+pub async fn start_snapshot(mode: SnapshotMode) -> Result<(), Box<dyn std::error::Error>> {
     let local_txs = crate::db::get_local_transaction_log()?;
     let summaries: Vec<TxSummary> = local_txs.iter().map(|t| t.into()).collect();
 
     let (site_id, clock, expected) = {
         let st = crate::state::LOCAL_APP_STATE.lock().await;
-        (
-            st.get_site_id().to_string(),
-            st.get_clock().clone(),
-            st.nb_connected_neighbours + 1,
-        )
+        // We expect a snapshot from all connected peers
+        // + 1 for self
+        let expected_peers = match mode {
+            SnapshotMode::NetworkMode => {
+                // In NetworkMode, we expect a snapshot from all connected peers except our parent
+                st.get_connected_nei_addr().len()
+            }
+            _ => {
+                // Default case: expect snapshots from all connected peers including ourselves
+                st.get_connected_nei_addr().len() + 1
+            }
+        };
+        (st.get_site_id(), st.get_clock(), expected_peers)
     };
-
-    log::debug!("Expected {} sites for snapshot.", expected);
 
     {
         let mut mgr = LOCAL_SNAPSHOT_MANAGER.lock().await;
         mgr.expected = expected;
         mgr.received.clear();
+        mgr.mode = mode.clone();
         if let Some(gs) = mgr.push(crate::message::SnapshotResponse {
             site_id: site_id.clone(),
             clock: clock.clone(),
             tx_log: summaries.clone(),
         }) {
-            log::info!("Global snapshot ready, hold per site : {:#?}", gs.missing);
-            crate::snapshot::persist(&gs).await.unwrap();
+            if mode.clone() == SnapshotMode::FileMode {
+                log::info!(
+                    "Global snapshot ready to be saved at start, hold per site : {:#?}",
+                    gs.missing
+                );
+                mgr.path = crate::snapshot::persist(&gs, site_id.clone())
+                    .await
+                    .unwrap()
+                    .parse()
+                    .ok();
+            } else if mode.clone() == SnapshotMode::SyncMode {
+                log::info!("No other site, synchronization done");
+            } else {
+                log::error!(
+                    "Start snapshot is not supposed to be called when there is no neighbours with network mode"
+                );
+            }
         }
     }
-
-    // crate::network::send_message_to_all_peers(
-    //     None,
-    //     crate::message::NetworkMessageCode::SnapshotRequest,
-    //     crate::message::MessageInfo::None,
-    // )
-    // .await?;
 
     Ok(())
 }
@@ -237,13 +271,8 @@ pub async fn start_snapshot() -> Result<(), Box<dyn std::error::Error>> {
 /// Persists a global snapshot to disk
 ///
 /// Saves the snapshot as a JSON file with a timestamp in the filename.
-pub async fn persist(snapshot: &GlobalSnapshot) -> std::io::Result<()> {
+pub async fn persist(snapshot: &GlobalSnapshot, site_id: String) -> std::io::Result<String> {
     use std::io::Write;
-
-    let site_id = {
-        let st = crate::state::LOCAL_APP_STATE.lock().await;
-        st.get_site_id().to_string()
-    };
 
     let ts = chrono::Local::now().format("%Y%m%d_%H%M%S");
     let filename = format!("snapshot_{}_{}.json", site_id, ts);
@@ -252,7 +281,8 @@ pub async fn persist(snapshot: &GlobalSnapshot) -> std::io::Result<()> {
     let json = serde_json::to_string_pretty(snapshot).unwrap();
     file.write_all(json.as_bytes())?;
     println!("📸 Snapshot completed successfully at {}", filename);
-    Ok(())
+
+    Ok(filename)
 }
 
 #[cfg(feature = "server")]
