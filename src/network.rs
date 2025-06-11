@@ -263,6 +263,22 @@ pub async fn handle_network_message(
                             message.message_initiator_id.clone(),
                             message.sender_addr,
                         );
+                        state.set_wave_lamport(
+                            message.message_initiator_id.clone(),
+                            *message.clock.get_lamport(),
+                        );
+                        state.set_wave_lamport(
+                            message.message_initiator_id.clone(),
+                            *message.clock.get_lamport(),
+                        );
+                        state.set_wave_lamport(
+                            message.message_initiator_id.clone(),
+                            *message.clock.get_lamport(),
+                        );
+                        state.set_wave_lamport(
+                            message.message_initiator_id.clone(),
+                            *message.clock.get_lamport(),
+                        );
 
                         let nb_neighbours = state.get_nb_connected_neighbours();
                         let current_value = state
@@ -345,6 +361,7 @@ pub async fn handle_network_message(
                             "0.0.0.0:0".parse().unwrap(),
                         );
                         state.clear_children_addr(&message.message_initiator_id);
+                        state.clear_wave_lamport(&message.message_initiator_id);
                     }
                 }
             }
@@ -353,11 +370,14 @@ pub async fn handle_network_message(
                 // Message rouge
                 let mut state = LOCAL_APP_STATE.lock().await;
 
+                let current = state.get_wave_lamport(&message.message_initiator_id);
                 if let Some(children) = state
                     .children_for_transaction_wave
                     .get_mut(&message.message_initiator_id)
                 {
-                    if children.remove(&message.sender_addr) {
+                    if current == Some(*message.clock.get_lamport())
+                        && children.remove(&message.sender_addr)
+                    {
                         let nb_neighbours = state.get_nb_connected_neighbours();
                         let current_value = state
                             .attended_neighbours_nb_for_transaction_wave
@@ -376,6 +396,8 @@ pub async fn handle_network_message(
                     .copied()
                     .unwrap_or(-1)
                     == 0
+                    && state.get_wave_lamport(&message.message_initiator_id)
+                        == Some(*message.clock.get_lamport())
                 {
                     if state
                         .parent_addr_for_transaction_wave
@@ -424,6 +446,7 @@ pub async fn handle_network_message(
                         "0.0.0.0:0".parse().unwrap(),
                     );
                     state.clear_children_addr(&message.message_initiator_id);
+                    state.clear_wave_lamport(&message.message_initiator_id);
                 }
             }
 
@@ -431,11 +454,14 @@ pub async fn handle_network_message(
                 // Message rouge
                 let mut state = LOCAL_APP_STATE.lock().await;
 
+                let current = state.get_wave_lamport(&message.message_initiator_id);
                 if let Some(children) = state
                     .children_for_transaction_wave
                     .get_mut(&message.message_initiator_id)
                 {
-                    if children.remove(&message.sender_addr) {
+                    if current == Some(*message.clock.get_lamport())
+                        && children.remove(&message.sender_addr)
+                    {
                         let nb_neighbours = state.get_nb_connected_neighbours();
                         let current_value = state
                             .attended_neighbours_nb_for_transaction_wave
@@ -454,6 +480,8 @@ pub async fn handle_network_message(
                     .copied()
                     .unwrap_or(-1)
                     == 0
+                    && state.get_wave_lamport(&message.message_initiator_id)
+                        == Some(*message.clock.get_lamport())
                 {
                     if state
                         .parent_addr_for_transaction_wave
@@ -501,6 +529,7 @@ pub async fn handle_network_message(
                         "0.0.0.0:0".parse().unwrap(),
                     );
                     state.clear_children_addr(&message.message_initiator_id);
+                    state.clear_wave_lamport(&message.message_initiator_id);
                 }
             }
 
@@ -605,6 +634,7 @@ pub async fn handle_network_message(
                             "0.0.0.0:0".parse().unwrap(),
                         );
                         state.clear_children_addr(&message.message_initiator_id);
+                        state.clear_wave_lamport(&message.message_initiator_id);
                     }
                 }
             }
@@ -709,6 +739,10 @@ pub async fn handle_network_message(
                                 message.message_initiator_id.clone(),
                                 message.sender_addr,
                             );
+                            state.set_wave_lamport(
+                                message.message_initiator_id.clone(),
+                                *message.clock.get_lamport(),
+                            );
 
                             let nb_neighbours = state.get_nb_connected_neighbours();
                             let current_value = state
@@ -788,15 +822,19 @@ pub async fn handle_network_message(
                 // Message rouge
                 let mut state = LOCAL_APP_STATE.lock().await;
 
-                let nb_neighbours = state.get_nb_connected_neighbours();
-                let current_value = state
-                    .attended_neighbours_nb_for_transaction_wave
-                    .get(&message.message_initiator_id)
-                    .copied()
-                    .unwrap_or(nb_neighbours);
-                state
-                    .attended_neighbours_nb_for_transaction_wave
-                    .insert(message.message_initiator_id.clone(), current_value - 1);
+                if state.get_wave_lamport(&message.message_initiator_id)
+                    == Some(*message.clock.get_lamport())
+                {
+                    let nb_neighbours = state.get_nb_connected_neighbours();
+                    let current_value = state
+                        .attended_neighbours_nb_for_transaction_wave
+                        .get(&message.message_initiator_id)
+                        .copied()
+                        .unwrap_or(nb_neighbours);
+                    state
+                        .attended_neighbours_nb_for_transaction_wave
+                        .insert(message.message_initiator_id.clone(), current_value - 1);
+                }
 
                 if state
                     .attended_neighbours_nb_for_transaction_wave
@@ -804,6 +842,8 @@ pub async fn handle_network_message(
                     .copied()
                     .unwrap_or(-1)
                     == 0
+                    && state.get_wave_lamport(&message.message_initiator_id)
+                        == Some(*message.clock.get_lamport())
                 {
                     if state
                         .parent_addr_for_transaction_wave

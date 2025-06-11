@@ -46,6 +46,8 @@ pub struct AppState {
     /// Set of children addresses for each wave initiator id
     pub children_for_transaction_wave:
         std::collections::HashMap<String, std::collections::HashSet<std::net::SocketAddr>>,
+    /// Lamport clock associated with the current wave for each initiator
+    pub wave_lamport_for_transaction: std::collections::HashMap<String, i64>,
 
     // --- Logical Clocks ---
     /// Logical clock implementation for distributed synchronization
@@ -71,6 +73,7 @@ impl AppState {
         let parent_addr = std::collections::HashMap::new();
         let nb_of_attended_neighbors = std::collections::HashMap::new();
         let children_map = std::collections::HashMap::new();
+        let wave_lamport_map = std::collections::HashMap::new();
         let in_use_neighbors = Vec::new();
         let sockets_for_connected_peers = std::collections::HashMap::new();
         let gm = std::collections::HashMap::new();
@@ -85,6 +88,7 @@ impl AppState {
             parent_addr_for_transaction_wave: parent_addr,
             attended_neighbours_nb_for_transaction_wave: nb_of_attended_neighbors,
             children_for_transaction_wave: children_map,
+            wave_lamport_for_transaction: wave_lamport_map,
             connected_neighbours_addrs: in_use_neighbors,
             clocks,
             sync_needed: false,
@@ -251,6 +255,8 @@ impl AppState {
             code: NetworkMessageCode::AcquireMutex,
         };
 
+        self.set_wave_lamport(self.site_id.clone(), *self.clocks.get_lamport());
+
         let should_diffuse = {
             // initialisation des paramètres avant la diffusion d'un message
             self.set_parent_addr(self.site_id.to_string(), self.site_addr);
@@ -302,6 +308,8 @@ impl AppState {
             info: MessageInfo::ReleaseMutex(crate::message::ReleaseMutexPayload),
             code: NetworkMessageCode::ReleaseGlobalMutex,
         };
+
+        self.set_wave_lamport(self.site_id.clone(), *self.clocks.get_lamport());
 
         self.global_mutex_fifo.remove(&self.site_id);
         self.in_sc = false;
@@ -463,6 +471,22 @@ impl AppState {
     /// Reset the children addresses for a wave from initiator_id
     pub fn clear_children_addr(&mut self, initiator_id: &str) {
         self.children_for_transaction_wave.remove(initiator_id);
+    }
+
+    /// Set the lamport clock value for a wave from initiator_id
+    pub fn set_wave_lamport(&mut self, initiator_id: String, lamport: i64) {
+        self.wave_lamport_for_transaction
+            .insert(initiator_id, lamport);
+    }
+
+    /// Get the lamport clock value for a wave from initiator_id
+    pub fn get_wave_lamport(&self, initiator_id: &str) -> Option<i64> {
+        self.wave_lamport_for_transaction.get(initiator_id).copied()
+    }
+
+    /// Clear the lamport clock entry for a wave from initiator_id
+    pub fn clear_wave_lamport(&mut self, initiator_id: &str) {
+        self.wave_lamport_for_transaction.remove(initiator_id);
     }
 
     /// Returns the number of deg(1) neighbors connected
