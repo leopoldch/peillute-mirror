@@ -43,6 +43,10 @@ pub struct AppState {
     pub parent_addr_for_transaction_wave: std::collections::HashMap<String, std::net::SocketAddr>,
     /// Number of response expected from our direct neighbours (deg(1) neighbours for this site) = nb of connected neighbours - 1 (parent) for a specific wave initiator id
     pub attended_neighbours_nb_for_transaction_wave: std::collections::HashMap<String, i64>,
+    /// Children addresses for a wave keyed by the initiator id
+    pub children_for_wave: std::collections::HashMap<String, Vec<std::net::SocketAddr>>,
+    /// Pending message to diffuse once the orientation phase is complete
+    pub pending_wave_messages: std::collections::HashMap<String, crate::message::Message>,
 
     // --- Logical Clocks ---
     /// Logical clock implementation for distributed synchronization
@@ -72,6 +76,8 @@ impl AppState {
         let gm = std::collections::HashMap::new();
         let waiting_sc = false;
         let in_sc = false;
+        let children = std::collections::HashMap::new();
+        let pending = std::collections::HashMap::new();
 
         Self {
             site_id,
@@ -80,6 +86,8 @@ impl AppState {
             site_addr: local_addr,
             parent_addr_for_transaction_wave: parent_addr,
             attended_neighbours_nb_for_transaction_wave: nb_of_attended_neighbors,
+            children_for_wave: children,
+            pending_wave_messages: pending,
             connected_neighbours_addrs: in_use_neighbors,
             clocks,
             sync_needed: false,
@@ -223,7 +231,7 @@ impl AppState {
 
     pub async fn acquire_mutex(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         use crate::message::{Message, MessageInfo, NetworkMessageCode};
-        use crate::network::diffuse_message_without_lock;
+        use crate::network::start_wave;
 
         self.update_clock(None).await;
 
@@ -246,26 +254,14 @@ impl AppState {
             code: NetworkMessageCode::AcquireMutex,
         };
 
-        let should_diffuse = {
-            // initialisation des paramètres avant la diffusion d'un message
-            self.set_parent_addr(self.site_id.to_string(), self.site_addr);
-            self.set_nb_nei_for_wave(self.site_id.to_string(), self.get_nb_connected_neighbours());
-            self.get_nb_connected_neighbours() > 0
-        };
+        let should_diffuse = self.get_nb_connected_neighbours() > 0;
 
         if should_diffuse {
             self.notify_sc.notify_waiters();
             self.in_sc = false;
             self.waiting_sc = true;
             log::info!("Début de la diffusion d'une acquisition de mutex");
-            diffuse_message_without_lock(
-                &msg,
-                self.get_site_addr(),
-                self.get_site_id().as_str(),
-                self.get_connected_nei_addr(),
-                self.get_parent_addr_for_wave(msg.message_initiator_id.clone()),
-            )
-            .await?;
+            start_wave(&msg).await?;
         } else {
             log::info!("Il n'y a pas de voisins, on prends la section critique");
             self.in_sc = true;
@@ -278,7 +274,7 @@ impl AppState {
 
     pub async fn release_mutex(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         use crate::message::{Message, MessageInfo, NetworkMessageCode};
-        use crate::network::diffuse_message_without_lock;
+        use crate::network::start_wave;
 
         self.update_clock(None).await;
 
@@ -297,23 +293,11 @@ impl AppState {
         self.in_sc = false;
         self.waiting_sc = false;
 
-        let should_diffuse = {
-            // initialisation des paramètres avant la diffusion d'un message
-            self.set_parent_addr(self.site_id.to_string(), self.site_addr);
-            self.set_nb_nei_for_wave(self.site_id.to_string(), self.get_nb_connected_neighbours());
-            self.get_nb_connected_neighbours() > 0
-        };
+        let should_diffuse = self.get_nb_connected_neighbours() > 0;
 
         if should_diffuse {
             log::info!("Début de la diffusion d'un relachement de mutex");
-            diffuse_message_without_lock(
-                &msg,
-                self.get_site_addr(),
-                self.get_site_id().as_str(),
-                self.get_connected_nei_addr(),
-                self.get_parent_addr_for_wave(msg.message_initiator_id.clone()),
-            )
-            .await?;
+            start_wave(&msg).await?;
         }
         Ok(())
     }
@@ -433,6 +417,37 @@ impl AppState {
     pub fn set_parent_addr(&mut self, initiator_id: String, peer_adr: std::net::SocketAddr) {
         self.parent_addr_for_transaction_wave
             .insert(initiator_id, peer_adr);
+    }
+
+    /// Add a child address for a specific wave
+    pub fn add_child_for_wave(&mut self, initiator_id: String, addr: std::net::SocketAddr) {
+        self.children_for_wave
+            .entry(initiator_id)
+            .or_default()
+            .push(addr);
+    }
+
+    /// Get children list for a specific wave
+    pub fn get_children_for_wave(&self, initiator_id: &String) -> Vec<std::net::SocketAddr> {
+        self.children_for_wave
+            .get(initiator_id)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    /// Clear children list for a specific wave
+    pub fn clear_children_for_wave(&mut self, initiator_id: &String) {
+        self.children_for_wave.remove(initiator_id);
+    }
+
+    /// Store a pending wave message waiting for orientation
+    pub fn set_pending_wave_message(&mut self, initiator_id: String, msg: crate::message::Message) {
+        self.pending_wave_messages.insert(initiator_id, msg);
+    }
+
+    /// Take the pending wave message if any
+    pub fn take_pending_wave_message(&mut self, initiator_id: &String) -> Option<crate::message::Message> {
+        self.pending_wave_messages.remove(initiator_id)
     }
 
     /// Returns the number of deg(1) neighbors connected

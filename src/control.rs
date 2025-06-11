@@ -174,7 +174,7 @@ pub async fn enqueue_critical(cmd: CriticalCommands) -> Result<(), Box<dyn std::
 /// Called by the control worker only when the Mutex is acquired
 pub async fn execute_critical(cmd: CriticalCommands) -> Result<(), Box<dyn std::error::Error>> {
     use crate::message::{Message, MessageInfo, NetworkMessageCode};
-    use crate::network::diffuse_message;
+    use crate::network::start_wave;
     use crate::state::LOCAL_APP_STATE;
 
     let (clock, site_addr, site_id) = {
@@ -347,16 +347,12 @@ pub async fn execute_critical(cmd: CriticalCommands) -> Result<(), Box<dyn std::
     }
 
     let should_diffuse = {
-        // initialisation des paramètres avant la diffusion d'un message
-        let mut state = LOCAL_APP_STATE.lock().await;
-        let nb_neigh = state.get_nb_connected_neighbours();
-        state.set_parent_addr(site_id.to_string(), site_addr);
-        state.set_nb_nei_for_wave(site_id.to_string(), nb_neigh);
-        nb_neigh > 0
+        let state = LOCAL_APP_STATE.lock().await;
+        state.get_nb_connected_neighbours() > 0
     };
 
     if should_diffuse {
-        diffuse_message(&msg).await?;
+        start_wave(&msg).await?;
     };
     Ok(())
 }
@@ -633,6 +629,7 @@ pub async fn process_network_command(
         crate::message::MessageInfo::AckMutex(_) => {
             // Handle mutex acknowledgment
         }
+        crate::message::MessageInfo::OrientationAck(_) => {}
         crate::message::MessageInfo::AcquireMutex(_) => {
             // Handle mutex request
         }

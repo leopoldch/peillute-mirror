@@ -46,6 +46,10 @@ pub enum NetworkMessageCode {
     AckGlobalMutex,
     /// Acknowledgment of the global mutex acquisition
     AckReleaseGlobalMutex,
+    /// Orientation phase before a wave diffusion
+    Orientation,
+    /// Orientation acknowledgment
+    OrientationAck,
 }
 
 #[cfg(feature = "server")]
@@ -94,6 +98,8 @@ pub enum MessageInfo {
     ReleaseMutex(ReleaseMutexPayload),
     /// Acknowledge a critical section
     AckMutex(AckMutexPayload),
+    /// Acknowledge orientation phase
+    OrientationAck(OrientationAckPayload),
     /// No payload
     None,
 }
@@ -115,6 +121,13 @@ pub struct ReleaseMutexPayload;
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct AckMutexPayload {
     pub clock: i64,
+}
+
+#[cfg(feature = "server")]
+/// Payload for the OrientationAck message
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+pub struct OrientationAckPayload {
+    pub adopted: bool,
 }
 
 #[cfg(feature = "server")]
