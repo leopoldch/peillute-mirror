@@ -156,6 +156,7 @@ pub async fn announce(ip: &str, start_port: u16, end_port: u16, selected_port: u
                 &site_id,
                 &site_id,
                 local_addr,
+                &format!("{}-{}", site_id, clocks.get_lamport()),
                 clocks,
             )
             .await;
@@ -255,31 +256,31 @@ pub async fn handle_network_message(
                     let mut state = LOCAL_APP_STATE.lock().await;
                     let parent_id = state
                         .parent_addr_for_transaction_wave
-                        .get(&message.message_initiator_id)
+                        .get(&message.wave_id)
                         .unwrap_or(&"0.0.0.0:0".parse().unwrap())
                         .to_string();
                     if parent_id == "0.0.0.0:0" {
                         state.set_parent_addr(
-                            message.message_initiator_id.clone(),
+                            message.wave_id.clone(),
                             message.sender_addr,
                         );
 
                         let nb_neighbours = state.get_nb_connected_neighbours();
                         let current_value = state
                             .attended_neighbours_nb_for_transaction_wave
-                            .get(&message.message_initiator_id)
+                            .get(&message.wave_id)
                             .copied()
                             .unwrap_or(nb_neighbours);
 
                         state
                             .attended_neighbours_nb_for_transaction_wave
-                            .insert(message.message_initiator_id.clone(), current_value - 1);
+                            .insert(message.wave_id.clone(), current_value - 1);
 
                         log::debug!("Nombre de voisin : {}", current_value - 1);
 
                         diffuse = state
                             .attended_neighbours_nb_for_transaction_wave
-                            .get(&message.message_initiator_id)
+                            .get(&message.wave_id)
                             .copied()
                             .unwrap_or(0)
                             > 0;
@@ -296,7 +297,7 @@ pub async fn handle_network_message(
                     let (parent_addr, local_addr, site_id) = {
                         let state = LOCAL_APP_STATE.lock().await;
                         (
-                            state.get_parent_addr_for_wave(message.message_initiator_id.clone()),
+                            state.get_parent_addr_for_wave(message.wave_id.clone()),
                             &state.get_site_addr(),
                             &state.get_site_id().to_string(),
                         )
@@ -317,6 +318,7 @@ pub async fn handle_network_message(
                         site_id,
                         &message.message_initiator_id,
                         message.message_initiator_addr,
+                        &message.wave_id,
                         message.clock.clone(),
                     )
                     .await?;
@@ -327,9 +329,9 @@ pub async fn handle_network_message(
                         let peer_count = state.get_nb_connected_neighbours();
                         state
                             .attended_neighbours_nb_for_transaction_wave
-                            .insert(message.message_initiator_id.clone(), peer_count as i64);
+                            .insert(message.wave_id.clone(), peer_count as i64);
                         state.parent_addr_for_transaction_wave.insert(
-                            message.message_initiator_id.clone(),
+                            message.wave_id.clone(),
                             "0.0.0.0:0".parse().unwrap(),
                         );
                     }
@@ -342,24 +344,23 @@ pub async fn handle_network_message(
 
                 let nb_neighbours = state.get_nb_connected_neighbours();
                 let current_value = state
-                    .attended_neighbours_nb_for_transaction_wave
-                    .get(&message.message_initiator_id)
+                    .attended_neighbours_nb_for_transaction_wave.get(&message.wave_id)
                     .copied()
                     .unwrap_or(nb_neighbours);
                 state
                     .attended_neighbours_nb_for_transaction_wave
-                    .insert(message.message_initiator_id.clone(), current_value - 1);
+                    .insert(message.wave_id.clone(), current_value - 1);
 
                 if state
                     .attended_neighbours_nb_for_transaction_wave
-                    .get(&message.message_initiator_id.clone())
+                    .get(&message.wave_id.clone())
                     .copied()
                     .unwrap_or(-1)
                     == 0
                 {
                     if state
                         .parent_addr_for_transaction_wave
-                        .get(&message.message_initiator_id.clone())
+                        .get(&message.wave_id.clone())
                         .copied()
                         .unwrap_or("99.99.99.99:0".parse().unwrap())
                         == state.get_site_addr()
@@ -375,12 +376,12 @@ pub async fn handle_network_message(
                             "On est de le noeud {}. On a reçu un rouge de tous nos fils: on acquite au parent {}",
                             state.get_site_addr(),
                             state
-                                .get_parent_addr_for_wave(message.message_initiator_id.clone())
+                                .get_parent_addr_for_wave(message.wave_id.clone())
                                 .to_string()
                                 .as_str()
                         );
                         send_message(
-                            state.get_parent_addr_for_wave(message.message_initiator_id.clone()),
+                            state.get_parent_addr_for_wave(message.wave_id.clone()),
                             MessageInfo::AckMutex(crate::message::AckMutexPayload {
                                 clock: message.clock.get_lamport().clone(),
                             }),
@@ -390,6 +391,7 @@ pub async fn handle_network_message(
                             &state.get_site_id().to_string(),
                             &message.message_initiator_id,
                             message.message_initiator_addr,
+                            &message.wave_id,
                             state.get_clock().clone(),
                         )
                         .await?;
@@ -398,9 +400,9 @@ pub async fn handle_network_message(
                     let peer_count = state.get_nb_connected_neighbours();
                     state
                         .attended_neighbours_nb_for_transaction_wave
-                        .insert(message.message_initiator_id.clone(), peer_count as i64);
+                        .insert(message.wave_id.clone(), peer_count as i64);
                     state.parent_addr_for_transaction_wave.insert(
-                        message.message_initiator_id.clone(),
+                        message.wave_id.clone(),
                         "0.0.0.0:0".parse().unwrap(),
                     );
                 }
@@ -412,24 +414,23 @@ pub async fn handle_network_message(
 
                 let nb_neighbours = state.get_nb_connected_neighbours();
                 let current_value = state
-                    .attended_neighbours_nb_for_transaction_wave
-                    .get(&message.message_initiator_id)
+                    .attended_neighbours_nb_for_transaction_wave.get(&message.wave_id)
                     .copied()
                     .unwrap_or(nb_neighbours);
                 state
                     .attended_neighbours_nb_for_transaction_wave
-                    .insert(message.message_initiator_id.clone(), current_value - 1);
+                    .insert(message.wave_id.clone(), current_value - 1);
 
                 if state
                     .attended_neighbours_nb_for_transaction_wave
-                    .get(&message.message_initiator_id.clone())
+                    .get(&message.wave_id.clone())
                     .copied()
                     .unwrap_or(-1)
                     == 0
                 {
                     if state
                         .parent_addr_for_transaction_wave
-                        .get(&message.message_initiator_id.clone())
+                        .get(&message.wave_id.clone())
                         .copied()
                         .unwrap_or("99.99.99.99:0".parse().unwrap())
                         == state.get_site_addr()
@@ -446,12 +447,12 @@ pub async fn handle_network_message(
                             "On est de le noeud {}. On a reçu un rouge de tous nos fils: on acquite au parent {}",
                             state.get_site_addr(),
                             state
-                                .get_parent_addr_for_wave(message.message_initiator_id.clone())
+                                .get_parent_addr_for_wave(message.wave_id.clone())
                                 .to_string()
                                 .as_str()
                         );
                         send_message(
-                            state.get_parent_addr_for_wave(message.message_initiator_id.clone()),
+                            state.get_parent_addr_for_wave(message.wave_id.clone()),
                             MessageInfo::None,
                             None,
                             NetworkMessageCode::AckReleaseGlobalMutex,
@@ -459,6 +460,7 @@ pub async fn handle_network_message(
                             &state.get_site_id().to_string(),
                             &message.message_initiator_id,
                             message.message_initiator_addr,
+                            &message.wave_id,
                             state.get_clock().clone(),
                         )
                         .await?;
@@ -467,9 +469,9 @@ pub async fn handle_network_message(
                     let peer_count = state.get_nb_connected_neighbours();
                     state
                         .attended_neighbours_nb_for_transaction_wave
-                        .insert(message.message_initiator_id.clone(), peer_count as i64);
+                        .insert(message.wave_id.clone(), peer_count as i64);
                     state.parent_addr_for_transaction_wave.insert(
-                        message.message_initiator_id.clone(),
+                        message.wave_id.clone(),
                         "0.0.0.0:0".parse().unwrap(),
                     );
                 }
@@ -488,31 +490,31 @@ pub async fn handle_network_message(
                     let mut state = LOCAL_APP_STATE.lock().await;
                     let parent_id = state
                         .parent_addr_for_transaction_wave
-                        .get(&message.message_initiator_id)
+                        .get(&message.wave_id)
                         .unwrap_or(&"0.0.0.0:0".parse().unwrap())
                         .to_string();
                     if parent_id == "0.0.0.0:0" {
                         state.set_parent_addr(
-                            message.message_initiator_id.clone(),
+                            message.wave_id.clone(),
                             message.sender_addr,
                         );
 
                         let nb_neighbours = state.get_nb_connected_neighbours();
                         let current_value = state
                             .attended_neighbours_nb_for_transaction_wave
-                            .get(&message.message_initiator_id)
+                            .get(&message.wave_id)
                             .copied()
                             .unwrap_or(nb_neighbours);
 
                         state
                             .attended_neighbours_nb_for_transaction_wave
-                            .insert(message.message_initiator_id.clone(), current_value - 1);
+                            .insert(message.wave_id.clone(), current_value - 1);
 
                         log::debug!("Nombre de voisin : {}", current_value - 1);
 
                         diffuse = state
                             .attended_neighbours_nb_for_transaction_wave
-                            .get(&message.message_initiator_id)
+                            .get(&message.wave_id)
                             .copied()
                             .unwrap_or(0)
                             > 0;
@@ -529,7 +531,7 @@ pub async fn handle_network_message(
                     let (parent_addr, local_addr, site_id) = {
                         let state = LOCAL_APP_STATE.lock().await;
                         (
-                            state.get_parent_addr_for_wave(message.message_initiator_id.clone()),
+                            state.get_parent_addr_for_wave(message.wave_id.clone()),
                             &state.get_site_addr(),
                             &state.get_site_id().to_string(),
                         )
@@ -548,6 +550,7 @@ pub async fn handle_network_message(
                         site_id,
                         &message.message_initiator_id,
                         message.message_initiator_addr,
+                        &message.wave_id,
                         message.clock.clone(),
                     )
                     .await?;
@@ -558,9 +561,9 @@ pub async fn handle_network_message(
                         let peer_count = state.get_nb_connected_neighbours();
                         state
                             .attended_neighbours_nb_for_transaction_wave
-                            .insert(message.message_initiator_id.clone(), peer_count as i64);
+                            .insert(message.wave_id.clone(), peer_count as i64);
                         state.parent_addr_for_transaction_wave.insert(
-                            message.message_initiator_id.clone(),
+                            message.wave_id.clone(),
                             "0.0.0.0:0".parse().unwrap(),
                         );
                     }
@@ -601,6 +604,7 @@ pub async fn handle_network_message(
                         state.get_site_id().as_str(),
                         &message.message_initiator_id.clone(),
                         message.message_initiator_addr,
+                        &message.wave_id,
                         state.get_clock(),
                     )
                     .await?;
@@ -659,31 +663,30 @@ pub async fn handle_network_message(
                         let mut state = LOCAL_APP_STATE.lock().await;
                         let parent_id = state
                             .parent_addr_for_transaction_wave
-                            .get(&message.message_initiator_id.clone())
+                            .get(&message.wave_id.clone())
                             .unwrap_or(&"0.0.0.0:0".parse().unwrap())
                             .to_string();
                         if parent_id == "0.0.0.0:0" {
                             state.set_parent_addr(
-                                message.message_initiator_id.clone(),
+                                message.wave_id.clone(),
                                 message.sender_addr,
                             );
 
                             let nb_neighbours = state.get_nb_connected_neighbours();
                             let current_value = state
-                                .attended_neighbours_nb_for_transaction_wave
-                                .get(&message.message_initiator_id)
+                                .attended_neighbours_nb_for_transaction_wave.get(&message.wave_id)
                                 .copied()
                                 .unwrap_or(nb_neighbours);
 
                             state
                                 .attended_neighbours_nb_for_transaction_wave
-                                .insert(message.message_initiator_id.clone(), current_value - 1);
+                                .insert(message.wave_id.clone(), current_value - 1);
 
                             log::debug!("Nombre de voisin : {}", current_value - 1);
 
                             diffuse = state
                                 .attended_neighbours_nb_for_transaction_wave
-                                .get(&message.message_initiator_id.clone())
+                                .get(&message.wave_id.clone())
                                 .copied()
                                 .unwrap_or(0)
                                 > 0;
@@ -701,7 +704,7 @@ pub async fn handle_network_message(
                             let state = LOCAL_APP_STATE.lock().await;
                             (
                                 state
-                                    .get_parent_addr_for_wave(message.message_initiator_id.clone()),
+                                    .get_parent_addr_for_wave(message.wave_id.clone()),
                                 state.get_site_addr(),
                                 state.get_site_id().to_string(),
                             )
@@ -720,6 +723,7 @@ pub async fn handle_network_message(
                             site_id.as_str(),
                             &message.message_initiator_id.clone(),
                             message.message_initiator_addr,
+                            &message.wave_id,
                             message.clock.clone(),
                         )
                         .await?;
@@ -730,10 +734,10 @@ pub async fn handle_network_message(
                             let peer_count = state.get_nb_connected_neighbours();
                             state
                                 .attended_neighbours_nb_for_transaction_wave
-                                .insert(message.message_initiator_id.clone(), peer_count as i64);
+                                .insert(message.wave_id.clone(), peer_count as i64);
                             state
                                 .parent_addr_for_transaction_wave
-                                .insert(message.message_initiator_id, "0.0.0.0:0".parse().unwrap());
+                                .insert(message.wave_id, "0.0.0.0:0".parse().unwrap());
                         }
                     }
                 } else {
@@ -748,24 +752,22 @@ pub async fn handle_network_message(
 
                 let nb_neighbours = state.get_nb_connected_neighbours();
                 let current_value = state
-                    .attended_neighbours_nb_for_transaction_wave
-                    .get(&message.message_initiator_id)
+                    .attended_neighbours_nb_for_transaction_wave.get(&message.wave_id)
                     .copied()
                     .unwrap_or(nb_neighbours);
                 state
                     .attended_neighbours_nb_for_transaction_wave
-                    .insert(message.message_initiator_id.clone(), current_value - 1);
+                    .insert(message.wave_id.clone(), current_value - 1);
 
                 if state
-                    .attended_neighbours_nb_for_transaction_wave
-                    .get(&message.message_initiator_id)
+                    .attended_neighbours_nb_for_transaction_wave.get(&message.wave_id)
                     .copied()
                     .unwrap_or(-1)
                     == 0
                 {
                     if state
                         .parent_addr_for_transaction_wave
-                        .get(&message.message_initiator_id)
+                        .get(&message.wave_id)
                         .copied()
                         .unwrap_or("99.99.99.99:0".parse().unwrap())
                         == state.get_site_addr()
@@ -781,12 +783,12 @@ pub async fn handle_network_message(
                             "On est dans le noeud {}. On a reçu un rouge de tous nos fils: on acquite au parent {}",
                             state.get_site_addr().to_string().as_str(),
                             state
-                                .get_parent_addr_for_wave(message.message_initiator_id.clone())
+                                .get_parent_addr_for_wave(message.wave_id.clone())
                                 .to_string()
                                 .as_str()
                         );
                         send_message(
-                            state.get_parent_addr_for_wave(message.message_initiator_id.clone()),
+                            state.get_parent_addr_for_wave(message.wave_id.clone()),
                             MessageInfo::None,
                             None,
                             NetworkMessageCode::TransactionAcknowledgement,
@@ -794,6 +796,7 @@ pub async fn handle_network_message(
                             &state.get_site_id().to_string(),
                             &message.message_initiator_id,
                             message.message_initiator_addr,
+                            &message.wave_id,
                             state.get_clock(),
                         )
                         .await?;
@@ -802,10 +805,10 @@ pub async fn handle_network_message(
                     let peer_count = state.get_nb_connected_neighbours();
                     state
                         .attended_neighbours_nb_for_transaction_wave
-                        .insert(message.message_initiator_id.clone(), peer_count as i64);
+                        .insert(message.wave_id.clone(), peer_count as i64);
                     state
                         .parent_addr_for_transaction_wave
-                        .insert(message.message_initiator_id, "0.0.0.0:0".parse().unwrap());
+                        .insert(message.wave_id, "0.0.0.0:0".parse().unwrap());
 
                     if should_reset && state.pending_commands.len() == 0 {
                         // fin de la section critique on peut notifier les pairs
@@ -833,31 +836,30 @@ pub async fn handle_network_message(
                     let mut state = LOCAL_APP_STATE.lock().await;
                     let parent_id = state
                         .parent_addr_for_transaction_wave
-                        .get(&message.message_initiator_id.clone())
+                        .get(&message.wave_id.clone())
                         .unwrap_or(&"0.0.0.0:0".parse().unwrap())
                         .to_string();
                     if parent_id == "0.0.0.0:0" {
                         state.set_parent_addr(
-                            message.message_initiator_id.clone(),
+                            message.wave_id.clone(),
                             message.sender_addr,
                         );
 
                         let nb_neighbours = state.get_nb_connected_neighbours();
                         let current_value = state
-                            .attended_neighbours_nb_for_transaction_wave
-                            .get(&message.message_initiator_id)
+                            .attended_neighbours_nb_for_transaction_wave.get(&message.wave_id)
                             .copied()
                             .unwrap_or(nb_neighbours);
 
                         state
                             .attended_neighbours_nb_for_transaction_wave
-                            .insert(message.message_initiator_id.clone(), current_value - 1);
+                            .insert(message.wave_id.clone(), current_value - 1);
 
                         log::debug!("Nombre de voisin : {}", current_value - 1);
 
                         diffuse = state
                             .attended_neighbours_nb_for_transaction_wave
-                            .get(&message.message_initiator_id.clone())
+                            .get(&message.wave_id.clone())
                             .copied()
                             .unwrap_or(0)
                             > 0;
@@ -882,7 +884,7 @@ pub async fn handle_network_message(
                 } else {
                     let parent_addr = {
                         let state = LOCAL_APP_STATE.lock().await;
-                        state.get_parent_addr_for_wave(message.message_initiator_id.clone())
+                        state.get_parent_addr_for_wave(message.wave_id.clone())
                     };
                     // Acquit message to parent
                     log::debug!(
@@ -911,6 +913,7 @@ pub async fn handle_network_message(
                         &site_id,
                         &message.message_initiator_id,
                         message.message_initiator_addr,
+                        &message.wave_id,
                         clock.clone(),
                     )
                     .await?;
@@ -921,10 +924,10 @@ pub async fn handle_network_message(
                         let peer_count = state.get_nb_connected_neighbours();
                         state
                             .attended_neighbours_nb_for_transaction_wave
-                            .insert(message.message_initiator_id.clone(), peer_count as i64);
+                            .insert(message.wave_id.clone(), peer_count as i64);
                         state
                             .parent_addr_for_transaction_wave
-                            .insert(message.message_initiator_id, "0.0.0.0:0".parse().unwrap());
+                            .insert(message.wave_id, "0.0.0.0:0".parse().unwrap());
                     }
                 }
             }
@@ -935,24 +938,22 @@ pub async fn handle_network_message(
 
                 let nb_neighbours = state.get_nb_connected_neighbours();
                 let current_value = state
-                    .attended_neighbours_nb_for_transaction_wave
-                    .get(&message.message_initiator_id)
+                    .attended_neighbours_nb_for_transaction_wave.get(&message.wave_id)
                     .copied()
                     .unwrap_or(nb_neighbours);
                 state
                     .attended_neighbours_nb_for_transaction_wave
-                    .insert(message.message_initiator_id.clone(), current_value - 1);
+                    .insert(message.wave_id.clone(), current_value - 1);
 
                 if state
-                    .attended_neighbours_nb_for_transaction_wave
-                    .get(&message.message_initiator_id)
+                    .attended_neighbours_nb_for_transaction_wave.get(&message.wave_id)
                     .copied()
                     .unwrap_or(-1)
                     == 0
                 {
                     if state
                         .parent_addr_for_transaction_wave
-                        .get(&message.message_initiator_id)
+                        .get(&message.wave_id)
                         .copied()
                         .unwrap_or("99.99.99.99:0".parse().unwrap())
                         == state.get_site_addr()
@@ -1002,14 +1003,14 @@ pub async fn handle_network_message(
                             "On est dans le noeud {}. On a reçu un rouge de tous nos fils: on acquite au parent {}",
                             state.get_site_addr().to_string().as_str(),
                             state
-                                .get_parent_addr_for_wave(message.message_initiator_id.clone())
+                                .get_parent_addr_for_wave(message.wave_id.clone())
                                 .to_string()
                                 .as_str()
                         );
                         log::debug!(
                             "On devrait pouvoir construire une snapshot globale avec tous nos voisins et l'envoyer à l'adresse de notre parent {}",
                             state
-                                .get_parent_addr_for_wave(message.message_initiator_id.clone())
+                                .get_parent_addr_for_wave(message.wave_id.clone())
                                 .to_string()
                                 .as_str()
                         );
@@ -1039,6 +1040,7 @@ pub async fn handle_network_message(
                                         &state.get_site_id().to_string(),
                                         &message.message_initiator_id,
                                         message.message_initiator_addr,
+                                        &message.wave_id,
                                         state.get_clock(),
                                     )
                                     .await?;
@@ -1054,10 +1056,10 @@ pub async fn handle_network_message(
                     let peer_count = state.get_nb_connected_neighbours();
                     state
                         .attended_neighbours_nb_for_transaction_wave
-                        .insert(message.message_initiator_id.clone(), peer_count as i64);
+                        .insert(message.wave_id.clone(), peer_count as i64);
                     state
                         .parent_addr_for_transaction_wave
-                        .insert(message.message_initiator_id, "0.0.0.0:0".parse().unwrap());
+                        .insert(message.wave_id, "0.0.0.0:0".parse().unwrap());
                     if should_reset && state.pending_commands.len() == 0 {
                         // fin de la section critique on peut notifier les pairs
                         state.release_mutex().await?;
@@ -1098,6 +1100,7 @@ pub async fn send_message(
     local_site: &str,
     initiator_id: &str,
     initiator_addr: std::net::SocketAddr,
+    wave_id: &str,
     sender_clock: crate::clock::Clock,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use crate::message::Message;
@@ -1112,11 +1115,12 @@ pub async fn send_message(
         sender_id: local_site.to_string(),
         sender_addr: local_addr,
         message_initiator_id: initiator_id.to_string(),
+        message_initiator_addr: initiator_addr,
+        wave_id: wave_id.to_string(),
         clock: sender_clock,
         command,
         info,
         code,
-        message_initiator_addr: initiator_addr,
     };
 
     if recipient_address.ip().is_unspecified() || recipient_address.port() == 0 {
@@ -1186,7 +1190,7 @@ pub async fn diffuse_message(
             state.get_site_addr(),
             state.get_site_id(),
             state.get_connected_nei_addr(),
-            state.get_parent_addr_for_wave(message.message_initiator_id.clone()),
+            state.get_parent_addr_for_wave(message.wave_id.clone()),
         )
     };
     diffuse_message_without_lock(
@@ -1225,6 +1229,7 @@ pub async fn diffuse_message_without_lock(
                 &site_id,
                 &message.message_initiator_id,
                 message.message_initiator_addr,
+                &message.wave_id,
                 message.clock.clone(),
             )
             .await
@@ -1265,6 +1270,7 @@ mod tests {
             local_site,
             local_site,
             local_addr,
+            "A-0",
             clock,
         )
         .await;

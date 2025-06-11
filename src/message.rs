@@ -58,6 +58,8 @@ pub struct Message {
     pub message_initiator_id: String,
     /// Network address of the node that initiated the message
     pub message_initiator_addr: std::net::SocketAddr,
+    /// Unique identifier for the wave this message belongs to
+    pub wave_id: String,
     /// Network address of the sending node
     pub sender_addr: std::net::SocketAddr,
     /// Logical clock state of the sending node
@@ -275,6 +277,7 @@ mod tests {
             sender_addr: "127.0.0.1:8080".parse().unwrap(),
             message_initiator_id: "A".to_string(),
             message_initiator_addr: "127.0.0.1:8080".parse().unwrap(),
+            wave_id: "A-0".to_string(),
             clock: clock,
             command: None,
             info: MessageInfo::None,

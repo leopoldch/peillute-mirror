@@ -220,6 +220,7 @@ async fn disconnect() {
             &site_id,
             &site_id,
             local_addr,
+            &format!("{}-{}", site_id, clock.get_lamport()),
             clock.clone(),
         )
         .await

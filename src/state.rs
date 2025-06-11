@@ -138,8 +138,7 @@ impl AppState {
 
     /// Initialize the parent of the current site as self for the wave protocol
     pub fn init_parent_addr_for_transaction_wave(&mut self) {
-        self.parent_addr_for_transaction_wave
-            .insert(self.site_id.clone(), self.site_addr.clone());
+        self.parent_addr_for_transaction_wave.clear();
     }
 
     /// Adds a new peer to the network and updates the logical clock
@@ -235,11 +234,13 @@ impl AppState {
             },
         );
 
+        let wave_id = format!("{}-{}", self.site_id, self.clocks.get_lamport());
         let msg = Message {
             sender_id: self.site_id.clone(),
             sender_addr: self.site_addr,
             message_initiator_id: self.site_id.clone(),
             message_initiator_addr: self.site_addr,
+            wave_id: wave_id.clone(),
             clock: self.clocks.clone(),
             command: None,
             info: MessageInfo::AcquireMutex(crate::message::AcquireMutexPayload),
@@ -248,8 +249,8 @@ impl AppState {
 
         let should_diffuse = {
             // initialisation des paramètres avant la diffusion d'un message
-            self.set_parent_addr(self.site_id.to_string(), self.site_addr);
-            self.set_nb_nei_for_wave(self.site_id.to_string(), self.get_nb_connected_neighbours());
+            self.set_parent_addr(wave_id.clone(), self.site_addr);
+            self.set_nb_nei_for_wave(wave_id.clone(), self.get_nb_connected_neighbours());
             self.get_nb_connected_neighbours() > 0
         };
 
@@ -263,7 +264,7 @@ impl AppState {
                 self.get_site_addr(),
                 self.get_site_id().as_str(),
                 self.get_connected_nei_addr(),
-                self.get_parent_addr_for_wave(msg.message_initiator_id.clone()),
+                self.get_parent_addr_for_wave(msg.wave_id.clone()),
             )
             .await?;
         } else {
@@ -282,11 +283,13 @@ impl AppState {
 
         self.update_clock(None).await;
 
+        let wave_id = format!("{}-{}", self.site_id, self.clocks.get_lamport());
         let msg = Message {
             sender_id: self.site_id.clone(),
             sender_addr: self.site_addr,
             message_initiator_id: self.site_id.clone(),
             message_initiator_addr: self.site_addr,
+            wave_id: wave_id.clone(),
             clock: self.clocks.clone(),
             command: None,
             info: MessageInfo::ReleaseMutex(crate::message::ReleaseMutexPayload),
@@ -299,8 +302,8 @@ impl AppState {
 
         let should_diffuse = {
             // initialisation des paramètres avant la diffusion d'un message
-            self.set_parent_addr(self.site_id.to_string(), self.site_addr);
-            self.set_nb_nei_for_wave(self.site_id.to_string(), self.get_nb_connected_neighbours());
+            self.set_parent_addr(wave_id.clone(), self.site_addr);
+            self.set_nb_nei_for_wave(wave_id.clone(), self.get_nb_connected_neighbours());
             self.get_nb_connected_neighbours() > 0
         };
 
@@ -311,7 +314,7 @@ impl AppState {
                 self.get_site_addr(),
                 self.get_site_id().as_str(),
                 self.get_connected_nei_addr(),
-                self.get_parent_addr_for_wave(msg.message_initiator_id.clone()),
+                self.get_parent_addr_for_wave(msg.wave_id.clone()),
             )
             .await?;
         }
@@ -404,9 +407,9 @@ impl AppState {
     }
 
     /// Set the number of attended neighbors for the wave from initiator_id
-    pub fn set_nb_nei_for_wave(&mut self, initiator_id: String, n: i64) {
+    pub fn set_nb_nei_for_wave(&mut self, wave_id: String, n: i64) {
         self.attended_neighbours_nb_for_transaction_wave
-            .insert(initiator_id, n);
+            .insert(wave_id, n);
     }
 
     /// Get the list of attended neighbors for the wave from initiator_id
@@ -422,17 +425,17 @@ impl AppState {
     }
 
     /// Get the parent (neighbour deg(1)) address for the wave from initiator_id
-    pub fn get_parent_addr_for_wave(&self, initiator_id: String) -> std::net::SocketAddr {
+    pub fn get_parent_addr_for_wave(&self, wave_id: String) -> std::net::SocketAddr {
         self.parent_addr_for_transaction_wave
-            .get(&initiator_id)
+            .get(&wave_id)
             .copied()
             .unwrap_or("0.0.0.0:0".parse().unwrap())
     }
 
     /// Set the parent (neighbour deg(1)) address for the wave from initiator_id
-    pub fn set_parent_addr(&mut self, initiator_id: String, peer_adr: std::net::SocketAddr) {
+    pub fn set_parent_addr(&mut self, wave_id: String, peer_adr: std::net::SocketAddr) {
         self.parent_addr_for_transaction_wave
-            .insert(initiator_id, peer_adr);
+            .insert(wave_id, peer_adr);
     }
 
     /// Returns the number of deg(1) neighbors connected

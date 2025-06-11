@@ -187,6 +187,7 @@ pub async fn execute_critical(cmd: CriticalCommands) -> Result<(), Box<dyn std::
     };
 
     let msg;
+    let wave_id = format!("{}-{}", site_id, clock.get_lamport());
 
     match cmd {
         CriticalCommands::CreateUser { name } => {
@@ -201,6 +202,7 @@ pub async fn execute_critical(cmd: CriticalCommands) -> Result<(), Box<dyn std::
                 sender_id: site_id.to_string(),
                 message_initiator_id: site_id.to_string(),
                 message_initiator_addr: site_addr,
+                wave_id: wave_id.clone(),
             };
         }
         CriticalCommands::Deposit { name, amount } => {
@@ -223,6 +225,7 @@ pub async fn execute_critical(cmd: CriticalCommands) -> Result<(), Box<dyn std::
                 sender_id: site_id.to_string(),
                 message_initiator_id: site_id.to_string(),
                 message_initiator_addr: site_addr,
+                wave_id: wave_id.clone(),
             };
         }
         CriticalCommands::Withdraw { name, amount } => {
@@ -244,6 +247,7 @@ pub async fn execute_critical(cmd: CriticalCommands) -> Result<(), Box<dyn std::
                 sender_id: site_id.to_string(),
                 message_initiator_id: site_id.to_string(),
                 message_initiator_addr: site_addr,
+                wave_id: wave_id.clone(),
             };
         }
         CriticalCommands::Transfer { from, to, amount } => {
@@ -266,6 +270,7 @@ pub async fn execute_critical(cmd: CriticalCommands) -> Result<(), Box<dyn std::
                 sender_id: site_id.to_string(),
                 message_initiator_id: site_id.to_string(),
                 message_initiator_addr: site_addr,
+                wave_id: wave_id.clone(),
             };
         }
         CriticalCommands::Pay { name, amount } => {
@@ -288,6 +293,7 @@ pub async fn execute_critical(cmd: CriticalCommands) -> Result<(), Box<dyn std::
                 sender_id: site_id.to_string(),
                 message_initiator_id: site_id.to_string(),
                 message_initiator_addr: site_addr,
+                wave_id: wave_id.clone(),
             };
         }
         CriticalCommands::Refund {
@@ -312,6 +318,7 @@ pub async fn execute_critical(cmd: CriticalCommands) -> Result<(), Box<dyn std::
                 sender_id: site_id.to_string(),
                 message_initiator_id: site_id.to_string(),
                 message_initiator_addr: site_addr,
+                wave_id: wave_id.clone(),
             };
         }
         CriticalCommands::FileSnapshot => {
@@ -326,6 +333,7 @@ pub async fn execute_critical(cmd: CriticalCommands) -> Result<(), Box<dyn std::
                 sender_id: site_id.to_string(),
                 message_initiator_id: site_id.to_string(),
                 message_initiator_addr: site_addr,
+                wave_id: wave_id.clone(),
                 clock: clock.clone(),
             };
         }
@@ -341,6 +349,7 @@ pub async fn execute_critical(cmd: CriticalCommands) -> Result<(), Box<dyn std::
                 sender_id: site_id.to_string(),
                 message_initiator_id: site_id.to_string(),
                 message_initiator_addr: site_addr,
+                wave_id: wave_id.clone(),
                 clock: clock.clone(),
             };
         }
@@ -350,8 +359,8 @@ pub async fn execute_critical(cmd: CriticalCommands) -> Result<(), Box<dyn std::
         // initialisation des paramètres avant la diffusion d'un message
         let mut state = LOCAL_APP_STATE.lock().await;
         let nb_neigh = state.get_nb_connected_neighbours();
-        state.set_parent_addr(site_id.to_string(), site_addr);
-        state.set_nb_nei_for_wave(site_id.to_string(), nb_neigh);
+        state.set_parent_addr(wave_id.clone(), site_addr);
+        state.set_nb_nei_for_wave(wave_id.clone(), nb_neigh);
         nb_neigh > 0
     };
 
