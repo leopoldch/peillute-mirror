@@ -267,7 +267,7 @@ impl AppState {
             let parent = self.get_parent_addr_for_wave(msg.message_initiator_id.clone());
             let children: std::collections::HashSet<std::net::SocketAddr> =
                 connected.iter().cloned().filter(|a| *a != parent).collect();
-            self.set_children_addr(self.site_id.to_string(), children.clone());
+            self.set_children_addr(msg.message_initiator_id.clone(), children.clone());
             diffuse_message_without_lock(
                 &msg,
                 self.get_site_addr(),
@@ -320,7 +320,7 @@ impl AppState {
             let parent = self.get_parent_addr_for_wave(msg.message_initiator_id.clone());
             let children: std::collections::HashSet<std::net::SocketAddr> =
                 connected.iter().cloned().filter(|a| *a != parent).collect();
-            self.set_children_addr(self.site_id.to_string(), children.clone());
+            self.set_children_addr(msg.message_initiator_id.clone(), children.clone());
             diffuse_message_without_lock(
                 &msg,
                 self.get_site_addr(),
