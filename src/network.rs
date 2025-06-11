@@ -291,6 +291,18 @@ pub async fn handle_network_message(
                     let mut snd_msg = message.clone();
                     snd_msg.sender_id = local_site_id.to_string();
                     snd_msg.sender_addr = local_site_addr;
+                    {
+                        let mut st = LOCAL_APP_STATE.lock().await;
+                        let children: std::collections::HashSet<std::net::SocketAddr> = st
+                            .get_connected_nei_addr()
+                            .into_iter()
+                            .filter(|a| {
+                                *a != st
+                                    .get_parent_addr_for_wave(message.message_initiator_id.clone())
+                            })
+                            .collect();
+                        st.set_children_addr(message.message_initiator_id.clone(), children);
+                    }
                     diffuse_message(&snd_msg).await?;
                 } else {
                     let (parent_addr, local_addr, site_id) = {
@@ -332,6 +344,7 @@ pub async fn handle_network_message(
                             message.message_initiator_id.clone(),
                             "0.0.0.0:0".parse().unwrap(),
                         );
+                        state.clear_children_addr(&message.message_initiator_id);
                     }
                 }
             }
@@ -340,15 +353,22 @@ pub async fn handle_network_message(
                 // Message rouge
                 let mut state = LOCAL_APP_STATE.lock().await;
 
-                let nb_neighbours = state.get_nb_connected_neighbours();
-                let current_value = state
-                    .attended_neighbours_nb_for_transaction_wave
-                    .get(&message.message_initiator_id)
-                    .copied()
-                    .unwrap_or(nb_neighbours);
-                state
-                    .attended_neighbours_nb_for_transaction_wave
-                    .insert(message.message_initiator_id.clone(), current_value - 1);
+                if let Some(children) = state
+                    .children_for_transaction_wave
+                    .get_mut(&message.message_initiator_id)
+                {
+                    if children.remove(&message.sender_addr) {
+                        let nb_neighbours = state.get_nb_connected_neighbours();
+                        let current_value = state
+                            .attended_neighbours_nb_for_transaction_wave
+                            .get(&message.message_initiator_id)
+                            .copied()
+                            .unwrap_or(nb_neighbours);
+                        state
+                            .attended_neighbours_nb_for_transaction_wave
+                            .insert(message.message_initiator_id.clone(), current_value - 1);
+                    }
+                }
 
                 if state
                     .attended_neighbours_nb_for_transaction_wave
@@ -403,6 +423,7 @@ pub async fn handle_network_message(
                         message.message_initiator_id.clone(),
                         "0.0.0.0:0".parse().unwrap(),
                     );
+                    state.clear_children_addr(&message.message_initiator_id);
                 }
             }
 
@@ -410,15 +431,22 @@ pub async fn handle_network_message(
                 // Message rouge
                 let mut state = LOCAL_APP_STATE.lock().await;
 
-                let nb_neighbours = state.get_nb_connected_neighbours();
-                let current_value = state
-                    .attended_neighbours_nb_for_transaction_wave
-                    .get(&message.message_initiator_id)
-                    .copied()
-                    .unwrap_or(nb_neighbours);
-                state
-                    .attended_neighbours_nb_for_transaction_wave
-                    .insert(message.message_initiator_id.clone(), current_value - 1);
+                if let Some(children) = state
+                    .children_for_transaction_wave
+                    .get_mut(&message.message_initiator_id)
+                {
+                    if children.remove(&message.sender_addr) {
+                        let nb_neighbours = state.get_nb_connected_neighbours();
+                        let current_value = state
+                            .attended_neighbours_nb_for_transaction_wave
+                            .get(&message.message_initiator_id)
+                            .copied()
+                            .unwrap_or(nb_neighbours);
+                        state
+                            .attended_neighbours_nb_for_transaction_wave
+                            .insert(message.message_initiator_id.clone(), current_value - 1);
+                    }
+                }
 
                 if state
                     .attended_neighbours_nb_for_transaction_wave
@@ -472,6 +500,7 @@ pub async fn handle_network_message(
                         message.message_initiator_id.clone(),
                         "0.0.0.0:0".parse().unwrap(),
                     );
+                    state.clear_children_addr(&message.message_initiator_id);
                 }
             }
 
@@ -524,6 +553,18 @@ pub async fn handle_network_message(
                     let mut snd_msg = message.clone();
                     snd_msg.sender_id = local_site_id.to_string();
                     snd_msg.sender_addr = local_site_addr;
+                    {
+                        let mut st = LOCAL_APP_STATE.lock().await;
+                        let children: std::collections::HashSet<std::net::SocketAddr> = st
+                            .get_connected_nei_addr()
+                            .into_iter()
+                            .filter(|a| {
+                                *a != st
+                                    .get_parent_addr_for_wave(message.message_initiator_id.clone())
+                            })
+                            .collect();
+                        st.set_children_addr(message.message_initiator_id.clone(), children);
+                    }
                     diffuse_message(&snd_msg).await?;
                 } else {
                     let (parent_addr, local_addr, site_id) = {
@@ -563,6 +604,7 @@ pub async fn handle_network_message(
                             message.message_initiator_id.clone(),
                             "0.0.0.0:0".parse().unwrap(),
                         );
+                        state.clear_children_addr(&message.message_initiator_id);
                     }
                 }
             }

@@ -43,6 +43,9 @@ pub struct AppState {
     pub parent_addr_for_transaction_wave: std::collections::HashMap<String, std::net::SocketAddr>,
     /// Number of response expected from our direct neighbours (deg(1) neighbours for this site) = nb of connected neighbours - 1 (parent) for a specific wave initiator id
     pub attended_neighbours_nb_for_transaction_wave: std::collections::HashMap<String, i64>,
+    /// Set of children addresses for each wave initiator id
+    pub children_for_transaction_wave:
+        std::collections::HashMap<String, std::collections::HashSet<std::net::SocketAddr>>,
 
     // --- Logical Clocks ---
     /// Logical clock implementation for distributed synchronization
@@ -67,6 +70,7 @@ impl AppState {
         let clocks = crate::clock::Clock::new();
         let parent_addr = std::collections::HashMap::new();
         let nb_of_attended_neighbors = std::collections::HashMap::new();
+        let children_map = std::collections::HashMap::new();
         let in_use_neighbors = Vec::new();
         let sockets_for_connected_peers = std::collections::HashMap::new();
         let gm = std::collections::HashMap::new();
@@ -80,6 +84,7 @@ impl AppState {
             site_addr: local_addr,
             parent_addr_for_transaction_wave: parent_addr,
             attended_neighbours_nb_for_transaction_wave: nb_of_attended_neighbors,
+            children_for_transaction_wave: children_map,
             connected_neighbours_addrs: in_use_neighbors,
             clocks,
             sync_needed: false,
@@ -258,12 +263,17 @@ impl AppState {
             self.in_sc = false;
             self.waiting_sc = true;
             log::info!("Début de la diffusion d'une acquisition de mutex");
+            let connected = self.get_connected_nei_addr();
+            let parent = self.get_parent_addr_for_wave(msg.message_initiator_id.clone());
+            let children: std::collections::HashSet<std::net::SocketAddr> =
+                connected.iter().cloned().filter(|a| *a != parent).collect();
+            self.set_children_addr(self.site_id.to_string(), children.clone());
             diffuse_message_without_lock(
                 &msg,
                 self.get_site_addr(),
                 self.get_site_id().as_str(),
-                self.get_connected_nei_addr(),
-                self.get_parent_addr_for_wave(msg.message_initiator_id.clone()),
+                connected,
+                parent,
             )
             .await?;
         } else {
@@ -306,12 +316,17 @@ impl AppState {
 
         if should_diffuse {
             log::info!("Début de la diffusion d'un relachement de mutex");
+            let connected = self.get_connected_nei_addr();
+            let parent = self.get_parent_addr_for_wave(msg.message_initiator_id.clone());
+            let children: std::collections::HashSet<std::net::SocketAddr> =
+                connected.iter().cloned().filter(|a| *a != parent).collect();
+            self.set_children_addr(self.site_id.to_string(), children.clone());
             diffuse_message_without_lock(
                 &msg,
                 self.get_site_addr(),
                 self.get_site_id().as_str(),
-                self.get_connected_nei_addr(),
-                self.get_parent_addr_for_wave(msg.message_initiator_id.clone()),
+                connected,
+                parent,
             )
             .await?;
         }
@@ -433,6 +448,21 @@ impl AppState {
     pub fn set_parent_addr(&mut self, initiator_id: String, peer_adr: std::net::SocketAddr) {
         self.parent_addr_for_transaction_wave
             .insert(initiator_id, peer_adr);
+    }
+
+    /// Set the children addresses for a wave from initiator_id
+    pub fn set_children_addr(
+        &mut self,
+        initiator_id: String,
+        children: std::collections::HashSet<std::net::SocketAddr>,
+    ) {
+        self.children_for_transaction_wave
+            .insert(initiator_id, children);
+    }
+
+    /// Reset the children addresses for a wave from initiator_id
+    pub fn clear_children_addr(&mut self, initiator_id: &str) {
+        self.children_for_transaction_wave.remove(initiator_id);
     }
 
     /// Returns the number of deg(1) neighbors connected
