@@ -259,24 +259,13 @@ pub async fn handle_network_message(
                         .unwrap_or(&"0.0.0.0:0".parse().unwrap())
                         .to_string();
                     if parent_id == "0.0.0.0:0" {
-                        state.set_parent_addr(
+                        let nb = state.init_parent_for_wave(
                             message.message_initiator_id.clone(),
                             message.sender_addr,
                         );
-
-                        let nb_neighbours = state.get_nb_connected_neighbours();
-                        let current_value = state
-                            .attended_neighbours_nb_for_transaction_wave
-                            .get(&message.message_initiator_id)
-                            .copied()
-                            .unwrap_or(nb_neighbours);
-
-                        state
-                            .attended_neighbours_nb_for_transaction_wave
-                            .insert(message.message_initiator_id.clone(), current_value - 1);
-
-                        log::debug!("Nombre de voisin : {}", current_value - 1);
-
+                        log::debug!("Nombre de voisin : {}", nb);
+                        diffuse = nb > 0;
+                    } else {
                         diffuse = state
                             .attended_neighbours_nb_for_transaction_wave
                             .get(&message.message_initiator_id)
@@ -492,24 +481,13 @@ pub async fn handle_network_message(
                         .unwrap_or(&"0.0.0.0:0".parse().unwrap())
                         .to_string();
                     if parent_id == "0.0.0.0:0" {
-                        state.set_parent_addr(
+                        let nb = state.init_parent_for_wave(
                             message.message_initiator_id.clone(),
                             message.sender_addr,
                         );
-
-                        let nb_neighbours = state.get_nb_connected_neighbours();
-                        let current_value = state
-                            .attended_neighbours_nb_for_transaction_wave
-                            .get(&message.message_initiator_id)
-                            .copied()
-                            .unwrap_or(nb_neighbours);
-
-                        state
-                            .attended_neighbours_nb_for_transaction_wave
-                            .insert(message.message_initiator_id.clone(), current_value - 1);
-
-                        log::debug!("Nombre de voisin : {}", current_value - 1);
-
+                        log::debug!("Nombre de voisin : {}", nb);
+                        diffuse = nb > 0;
+                    } else {
                         diffuse = state
                             .attended_neighbours_nb_for_transaction_wave
                             .get(&message.message_initiator_id)
@@ -663,24 +641,13 @@ pub async fn handle_network_message(
                             .unwrap_or(&"0.0.0.0:0".parse().unwrap())
                             .to_string();
                         if parent_id == "0.0.0.0:0" {
-                            state.set_parent_addr(
+                            let nb = state.init_parent_for_wave(
                                 message.message_initiator_id.clone(),
                                 message.sender_addr,
                             );
-
-                            let nb_neighbours = state.get_nb_connected_neighbours();
-                            let current_value = state
-                                .attended_neighbours_nb_for_transaction_wave
-                                .get(&message.message_initiator_id)
-                                .copied()
-                                .unwrap_or(nb_neighbours);
-
-                            state
-                                .attended_neighbours_nb_for_transaction_wave
-                                .insert(message.message_initiator_id.clone(), current_value - 1);
-
-                            log::debug!("Nombre de voisin : {}", current_value - 1);
-
+                            log::debug!("Nombre de voisin : {}", nb);
+                            diffuse = nb > 0;
+                        } else {
                             diffuse = state
                                 .attended_neighbours_nb_for_transaction_wave
                                 .get(&message.message_initiator_id.clone())

@@ -69,6 +69,9 @@ git clone https://gitlab.utc.fr/guegathe/peillute.git -j8
 
 # To run a demo using CLI mode with debug logs:
 ./launch_peillute_instance.sh -debug -demo_cli
+
+# To run a demo with a simple tree topology (three nodes):
+./launch_peillute_instance.sh -demo_tree
 ```
 
 ### 3. Manually Install Dependencies

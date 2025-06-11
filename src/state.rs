@@ -54,6 +54,8 @@ pub struct AppState {
     pub in_sc: bool,
     pub notify_sc: std::sync::Arc<tokio::sync::Notify>,
     pub pending_commands: std::collections::VecDeque<crate::control::CriticalCommands>,
+    /// Deterministic parent address used to avoid cycles
+    pub static_parent_addr: Option<std::net::SocketAddr>,
 }
 
 #[cfg(feature = "server")]
@@ -89,6 +91,7 @@ impl AppState {
             in_sc,
             notify_sc: std::sync::Arc::new(tokio::sync::Notify::new()),
             pending_commands: std::collections::VecDeque::new(),
+            static_parent_addr: None,
         }
     }
 
@@ -158,6 +161,7 @@ impl AppState {
             self.clocks
                 .update_clock(self.site_id.clone().as_str(), Some(&received_clock));
             self.neighbours_socket.insert(new_socket, new_addr);
+            self.update_static_parent_addr();
         }
     }
 
@@ -396,6 +400,26 @@ impl AppState {
     /// Add a connected neighbour to the list of connected neighbours
     pub fn add_connected_neighbour(&mut self, addr: std::net::SocketAddr) {
         self.connected_neighbours_addrs.push(addr);
+        self.update_static_parent_addr();
+    }
+
+    /// Compute and set the deterministic parent based on neighbours
+    fn update_static_parent_addr(&mut self) {
+        let local = self.site_addr.to_string();
+        let mut best: Option<std::net::SocketAddr> = None;
+        for addr in &self.connected_neighbours_addrs {
+            if addr.to_string() < local {
+                if best.map_or(true, |b| addr.to_string() < b.to_string()) {
+                    best = Some(*addr);
+                }
+            }
+        }
+        self.static_parent_addr = best;
+    }
+
+    /// Get the deterministic parent if any
+    pub fn get_static_parent_addr(&self) -> Option<std::net::SocketAddr> {
+        self.static_parent_addr
     }
 
     /// Returns the clock of the site
@@ -407,6 +431,43 @@ impl AppState {
     pub fn set_nb_nei_for_wave(&mut self, initiator_id: String, n: i64) {
         self.attended_neighbours_nb_for_transaction_wave
             .insert(initiator_id, n);
+    }
+
+    /// Initialize parent and neighbour count for a new wave
+    pub fn init_parent_for_wave(
+        &mut self,
+        initiator_id: String,
+        sender_addr: std::net::SocketAddr,
+    ) -> i64 {
+        if self
+            .parent_addr_for_transaction_wave
+            .get(&initiator_id)
+            .is_some()
+        {
+            return self
+                .attended_neighbours_nb_for_transaction_wave
+                .get(&initiator_id)
+                .copied()
+                .unwrap_or(0);
+        }
+
+        let parent = if initiator_id == self.site_id {
+            self.site_addr
+        } else if let Some(p) = self.static_parent_addr {
+            p
+        } else {
+            sender_addr
+        };
+
+        let nb = self.get_nb_connected_neighbours();
+        let expected = if parent == self.site_addr { nb } else { nb - 1 };
+
+        self.parent_addr_for_transaction_wave
+            .insert(initiator_id.clone(), parent);
+        self.attended_neighbours_nb_for_transaction_wave
+            .insert(initiator_id, expected);
+
+        expected
     }
 
     /// Get the list of attended neighbors for the wave from initiator_id

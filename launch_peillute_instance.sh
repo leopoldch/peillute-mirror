@@ -181,6 +181,24 @@ run_unique_cycle_demo() {
     fi
 }
 
+# Function to run a simple tree demo (three nodes, no cycle)
+run_tree_demo() {
+    echo "[*] Running the Peillute tree demo..."
+    cd target/dx/peillute/release/web
+
+    if [ "$(uname)" == "Darwin" ]; then
+        # macOS
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --cli-port 10001 --cli-peers 127.0.0.1:10002,127.0.0.1:10003 --cli-db-id 0\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --cli-port 10002 --cli-peers 127.0.0.1:10001 --cli-db-id 1\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --cli-port 10003 --cli-peers 127.0.0.1:10001 --cli-db-id 2\""
+    else
+        # Linux
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --cli-port 10001 --cli-peers 127.0.0.1:10002,127.0.0.1:10003 --cli-db-id 0; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --cli-port 10002 --cli-peers 127.0.0.1:10001 --cli-db-id 1; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --cli-port 10003 --cli-peers 127.0.0.1:10001 --cli-db-id 2; exec bash"
+    fi
+}
+
 
 # Function to run demo
 run_line_demo() {
@@ -292,6 +310,10 @@ for arg in "$@"; do
     fi
     if [ "$arg" == "-demo_cycle" ]; then
         run_unique_cycle_demo
+        exit 0
+    fi
+    if [ "$arg" == "-demo_tree" ]; then
+        run_tree_demo
         exit 0
     fi
     if [ "$arg" == "-demo_cli" ]; then
