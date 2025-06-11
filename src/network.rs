@@ -167,18 +167,15 @@ pub async fn announce(ip: &str, start_port: u16, end_port: u16, selected_port: u
         handles.push(handle);
     }
 
-    {
-        let mut state = LOCAL_APP_STATE.lock().await;
-        log::info!(
-            "Attended neighbours : {}",
-            success_count.load(Ordering::SeqCst)
-        );
-        state.init_nb_first_attended_neighbours(success_count.load(Ordering::SeqCst) as i64);
-    }
-
     // Await all task
     for handle in handles {
         let _ = handle.await;
+    }
+
+    // Update the number of attended neighbours
+    {
+        let mut state = LOCAL_APP_STATE.lock().await;
+        state.init_nb_first_attended_neighbours(success_count.load(Ordering::SeqCst) as i64);
     }
 }
 
@@ -306,7 +303,7 @@ pub async fn handle_network_message(
                     };
                     // Acquit message to parent
                     log::debug!(
-                        "Réception d'un message de transaction, on est sur une feuille, on acquite, envoie à {}",
+                        "Réception d'un message de d'acquisition de mutex, on est sur une feuille, on acquite, envoie à {}",
                         message.sender_addr.to_string().as_str()
                     );
                     send_message(
@@ -539,7 +536,7 @@ pub async fn handle_network_message(
                     };
                     // Acquit message to parent
                     log::debug!(
-                        "Réception d'un message de transaction, on est sur une feuille, on acquite, envoie à {}",
+                        "Réception d'un message de relachement de mutex global, on est sur une feuille, on acquite, envoie à {}",
                         message.sender_addr.to_string().as_str()
                     );
                     send_message(
@@ -933,6 +930,7 @@ pub async fn handle_network_message(
             }
             NetworkMessageCode::SnapshotResponse => {
                 // Message rouge
+                let mut should_reset = false;
                 let mut state = LOCAL_APP_STATE.lock().await;
 
                 let nb_neighbours = state.get_nb_connected_neighbours();
@@ -998,6 +996,7 @@ pub async fn handle_network_message(
                         }
 
                         println!("\x1b[1;31mDiffusion terminée et réussie !\x1b[0m");
+                        should_reset = true;
                     } else {
                         log::debug!(
                             "On est dans le noeud {}. On a reçu un rouge de tous nos fils: on acquite au parent {}",
@@ -1059,6 +1058,10 @@ pub async fn handle_network_message(
                     state
                         .parent_addr_for_transaction_wave
                         .insert(message.message_initiator_id, "0.0.0.0:0".parse().unwrap());
+                    if should_reset && state.pending_commands.len() == 0 {
+                        // fin de la section critique on peut notifier les pairs
+                        state.release_mutex().await?;
+                    };
                 } else {
                     log::debug!(
                         "On a reçu un message rouge d'un des fils mais la vague n'est pas encore terminée"
