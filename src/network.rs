@@ -102,6 +102,10 @@ pub async fn spawn_writer_task(
 pub async fn announce(ip: &str, start_port: u16, end_port: u16, selected_port: u16) {
     use crate::message::{MessageInfo, NetworkMessageCode};
     use crate::state::LOCAL_APP_STATE;
+    use std::collections::HashSet;
+    use std::net::SocketAddr;
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
 
     let (local_addr, site_id, clocks, cli_peers) = {
         let state = LOCAL_APP_STATE.lock().await;
@@ -114,9 +118,9 @@ pub async fn announce(ip: &str, start_port: u16, end_port: u16, selected_port: u
     };
 
     // Collect all peers to contact
-    let peer_to_ping: Vec<std::net::SocketAddr> = if !cli_peers.is_empty() {
+    let peer_to_ping: Vec<SocketAddr> = if !cli_peers.is_empty() {
         log::debug!("Manually connecting to peers based on args");
-        cli_peers
+        cli_peers.clone()
     } else {
         log::debug!("Looking for all ports to find potential peers");
         (start_port..=end_port)
@@ -125,59 +129,51 @@ pub async fn announce(ip: &str, start_port: u16, end_port: u16, selected_port: u
             .collect()
     };
 
-    //If there are no peers, we don't need to do anything
     if peer_to_ping.is_empty() {
         return;
     } else {
         let mut state = LOCAL_APP_STATE.lock().await;
-        state.init_sync(true); // we need to sync with other sites
+        state.init_sync(true);
     }
 
-    use std::sync::Arc;
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    let initial_adresses: HashSet<SocketAddr> = cli_peers.into_iter().collect();
+    let adresses_arc = Arc::new(Mutex::new(initial_adresses));
 
-    let success_count = Arc::new(AtomicUsize::new(0));
-
-    // Send discovery messages after the decision logic
-    let mut handles = Vec::new();
+    // Send discovery messages and collect successful peers
     for addr in peer_to_ping {
         let site_id = site_id.clone();
         let clocks = clocks.clone();
         let local_addr = local_addr.clone();
-        let success_count = Arc::clone(&success_count);
+        let adresses_arc = Arc::clone(&adresses_arc);
 
-        let handle = tokio::spawn(async move {
-            let result = send_message(
-                addr,
-                MessageInfo::None,
-                None,
-                NetworkMessageCode::Discovery,
-                local_addr,
-                &site_id,
-                &site_id,
-                local_addr,
-                clocks,
-            )
-            .await;
+        let result = send_message(
+            addr,
+            MessageInfo::None,
+            None,
+            NetworkMessageCode::Discovery,
+            local_addr,
+            &site_id,
+            &site_id,
+            local_addr,
+            clocks,
+        )
+        .await;
 
-            if result.is_ok() {
-                success_count.fetch_add(1, Ordering::SeqCst);
-            }
-        });
-        handles.push(handle);
+        if result.is_ok() {
+            let mut locked = adresses_arc.lock().await;
+            locked.insert(addr);
+        }
     }
 
-    // Await all task
-    for handle in handles {
-        let _ = handle.await;
-    }
+    // Update the state with discovered neighbours
+    let final_adresses = {
+        let locked = adresses_arc.lock().await;
+        locked.clone()
+    };
 
-    // Update the number of attended neighbours
     {
         let mut state = LOCAL_APP_STATE.lock().await;
-        let attendes = (state.get_cli_peers_addrs().len() as i64)
-            .max(success_count.load(Ordering::SeqCst) as i64);
-        state.init_nb_first_attended_neighbours(attendes);
+        state.init_first_attended_neighbours(final_adresses);
     }
 }
 
@@ -275,7 +271,10 @@ pub async fn handle_network_message(
                             .attended_neighbours_nb_for_transaction_wave
                             .insert(message.message_initiator_id.clone(), current_value - 1);
 
-                        log::debug!("Nombre de voisin : {}", current_value - 1);
+                        log::debug!(
+                            "[AcquireMutex Wave] Nombre de voisin attendu : {}",
+                            current_value - 1
+                        );
 
                         diffuse = state
                             .attended_neighbours_nb_for_transaction_wave
@@ -291,6 +290,10 @@ pub async fn handle_network_message(
                     let mut snd_msg = message.clone();
                     snd_msg.sender_id = local_site_id.to_string();
                     snd_msg.sender_addr = local_site_addr;
+                    log::debug!(
+                        "[AcquireMutex] Rediffusion de la vague provenant du site {}",
+                        message.message_initiator_addr,
+                    );
                     diffuse_message(&snd_msg).await?;
                 } else {
                     let (parent_addr, local_addr, site_id) = {
@@ -508,7 +511,10 @@ pub async fn handle_network_message(
                             .attended_neighbours_nb_for_transaction_wave
                             .insert(message.message_initiator_id.clone(), current_value - 1);
 
-                        log::debug!("Nombre de voisin : {}", current_value - 1);
+                        log::debug!(
+                            "[ReleaseGlobalMutex Wave] Nombre de voisin attendu : {}",
+                            current_value - 1
+                        );
 
                         diffuse = state
                             .attended_neighbours_nb_for_transaction_wave
@@ -524,6 +530,10 @@ pub async fn handle_network_message(
                     let mut snd_msg = message.clone();
                     snd_msg.sender_id = local_site_id.to_string();
                     snd_msg.sender_addr = local_site_addr;
+                    log::debug!(
+                        "[ReleaseGlobalMutex] Rediffusion de la vague provenant du site {}",
+                        message.message_initiator_addr,
+                    );
                     diffuse_message(&snd_msg).await?;
                 } else {
                     let (parent_addr, local_addr, site_id) = {
@@ -610,13 +620,15 @@ pub async fn handle_network_message(
             NetworkMessageCode::Acknowledgment => {
                 let ready_to_sync = {
                     let mut state = LOCAL_APP_STATE.lock().await;
-                    // If the site received an acknoledgement from a site,
-                    // It can be a site that is not in the network anymore
-                    state.add_incomming_peer(
-                        message.sender_addr,
-                        socket_of_the_sender,
-                        message.clock.clone(),
+
+                    // Try to remove the site from the list of initial attended neighbours
+                    state.try_remove_first_attended_neighbour(message.sender_addr);
+
+                    log::debug!(
+                        "Attended neighbours state: {:?}",
+                        state.get_first_attended_neighbours()
                     );
+
                     if message.message_initiator_addr == state.get_site_addr() {
                         for (site_id, nb_a_i) in state.get_nb_nei_for_wave().iter() {
                             state
@@ -624,12 +636,11 @@ pub async fn handle_network_message(
                                 .insert(site_id.clone(), *nb_a_i + 1);
                         }
                     }
+
                     // If we are in sync mode, we can start the sync process
                     // And we have received all the responses from the first attended neighbours counter
                     // We can start the sync process by starting a snapshot with sync mode
-                    state.get_sync()
-                        && state.get_nb_first_attended_neighbours()
-                            == state.get_nb_connected_neighbours()
+                    state.get_sync() && state.first_attended_neighbours_ok()
                 };
 
                 if ready_to_sync {
@@ -679,7 +690,10 @@ pub async fn handle_network_message(
                                 .attended_neighbours_nb_for_transaction_wave
                                 .insert(message.message_initiator_id.clone(), current_value - 1);
 
-                            log::debug!("Nombre de voisin : {}", current_value - 1);
+                            log::debug!(
+                                "[Transaction Wave] Nombre de voisin attendu : {}",
+                                current_value - 1
+                            );
 
                             diffuse = state
                                 .attended_neighbours_nb_for_transaction_wave
@@ -695,6 +709,10 @@ pub async fn handle_network_message(
                         let mut snd_msg = message.clone();
                         snd_msg.sender_id = local_site_id.to_string();
                         snd_msg.sender_addr = local_site_addr;
+                        log::debug!(
+                            "[Transaction] Rediffusion de la vague provenant du site {}",
+                            message.message_initiator_addr,
+                        );
                         diffuse_message(&snd_msg).await?;
                     } else {
                         let (parent_addr, local_addr, site_id) = {
@@ -856,7 +874,10 @@ pub async fn handle_network_message(
                             .attended_neighbours_nb_for_transaction_wave
                             .insert(message.message_initiator_id.clone(), current_value - 1);
 
-                        log::debug!("Nombre de voisin : {}", current_value - 1);
+                        log::debug!(
+                            "[SnapshotRequest Wave] Nombre de voisin attendu : {}",
+                            current_value - 1
+                        );
 
                         diffuse = state
                             .attended_neighbours_nb_for_transaction_wave
@@ -880,7 +901,11 @@ pub async fn handle_network_message(
                     );
                     crate::snapshot::start_snapshot(crate::snapshot::SnapshotMode::NetworkMode)
                         .await?;
-                    // When can then diffuse the request to other nodes
+                    // Whe then diffuse the request to other nodes
+                    log::debug!(
+                        "[SnapshotRequest] Rediffusion de la vague provenant du site {}",
+                        message.message_initiator_addr,
+                    );
                     diffuse_message(&snd_msg).await?;
                 } else {
                     let parent_addr = {
@@ -1178,11 +1203,6 @@ pub async fn diffuse_message(
     message: &crate::message::Message,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use crate::state::LOCAL_APP_STATE;
-
-    log::debug!(
-        "Début de la diffusion d'un message de type {:?}",
-        message.code
-    );
 
     let (local_addr, site_id, connected_nei_addr, parent_address) = {
         let state = LOCAL_APP_STATE.lock().await;

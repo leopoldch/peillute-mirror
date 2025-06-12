@@ -35,8 +35,8 @@ pub struct AppState {
     neighbours_socket: std::collections::HashMap<std::net::SocketAddr, std::net::SocketAddr>,
     /// Synchronization boolean
     sync_needed: bool,
-    /// Number of attended neighbours at launch, for the discovery phase
-    nb_first_attended_neighbours: i64,
+    /// Attended neighbours at launch, for the discovery phase
+    first_attended_neighbours: std::collections::HashSet<std::net::SocketAddr>,
 
     // --- Message Diffusion Info for Transaction ---
     /// Adress of the parent (deg(1) neighbour for this site) for a specific wave from initiator id
@@ -70,6 +70,7 @@ impl AppState {
         let in_use_neighbors = Vec::new();
         let sockets_for_connected_peers = std::collections::HashMap::new();
         let gm = std::collections::HashMap::new();
+        let first_attended_neighbours = std::collections::HashSet::new();
         let waiting_sc = false;
         let in_sc = false;
 
@@ -83,7 +84,7 @@ impl AppState {
             connected_neighbours_addrs: in_use_neighbors,
             clocks,
             sync_needed: false,
-            nb_first_attended_neighbours: 0,
+            first_attended_neighbours: first_attended_neighbours,
             global_mutex_fifo: gm,
             waiting_sc,
             in_sc,
@@ -126,14 +127,26 @@ impl AppState {
     }
 
     /// Set the number of attended neighbours at initialization
-    pub fn init_nb_first_attended_neighbours(&mut self, nb: i64) {
-        log::debug!("We will wait for {} attended neighbours", nb);
-        self.nb_first_attended_neighbours = nb;
+    pub fn init_first_attended_neighbours(
+        &mut self,
+        adresses: std::collections::HashSet<std::net::SocketAddr>,
+    ) {
+        log::debug!("We will wait for {} attended neighbours", adresses.len());
+        self.first_attended_neighbours = adresses;
+    }
+
+    /// Remove a neighbour from the list of attended neighbours
+    pub fn try_remove_first_attended_neighbour(&mut self, adress: std::net::SocketAddr) {
+        self.first_attended_neighbours.remove(&adress);
+    }
+
+    pub fn get_first_attended_neighbours(&self) -> std::collections::HashSet<std::net::SocketAddr> {
+        self.first_attended_neighbours.clone()
     }
 
     /// Get the number of attended neighbours
-    pub fn get_nb_first_attended_neighbours(&self) -> i64 {
-        self.nb_first_attended_neighbours
+    pub fn first_attended_neighbours_ok(&self) -> bool {
+        self.first_attended_neighbours.len() as i64 == 0
     }
 
     /// Initialize the parent of the current site as self for the wave protocol
@@ -257,7 +270,10 @@ impl AppState {
             self.notify_sc.notify_waiters();
             self.in_sc = false;
             self.waiting_sc = true;
-            log::info!("Début de la diffusion d'une acquisition de mutex");
+            log::info!(
+                "Début de la diffusion d'une demande de mutex depuis le site {}",
+                self.site_addr
+            );
             diffuse_message_without_lock(
                 &msg,
                 self.get_site_addr(),

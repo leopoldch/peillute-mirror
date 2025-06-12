@@ -356,6 +356,7 @@ pub async fn execute_critical(cmd: CriticalCommands) -> Result<(), Box<dyn std::
     };
 
     if should_diffuse {
+        log::debug!("Initiation d'une vague depuis le site {}", site_addr);
         diffuse_message(&msg).await?;
     };
     Ok(())
