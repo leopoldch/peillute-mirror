@@ -835,7 +835,6 @@ pub async fn handle_network_message(
 
                     if should_reset && state.pending_commands.len() == 0 {
                         // fin de la section critique on peut notifier les pairs
-                        println!("\x1b[1;31mRELEASE MUTEX TSX !\x1b[0m");
                         state.release_mutex().await?;
                     };
                 }
@@ -1094,7 +1093,6 @@ pub async fn handle_network_message(
                         .insert(message.message_initiator_id, "0.0.0.0:0".parse().unwrap());
                     if should_reset && state.pending_commands.len() == 0 {
                         // fin de la section critique on peut notifier les pairs
-                        println!("\x1b[1;31mRELEASE MUTEX SNAPSHOT !\x1b[0m");
                         state.release_mutex().await?;
                     };
                 } else {
