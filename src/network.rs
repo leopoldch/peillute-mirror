@@ -102,10 +102,6 @@ pub async fn spawn_writer_task(
 pub async fn announce(ip: &str, start_port: u16, end_port: u16, selected_port: u16) {
     use crate::message::{MessageInfo, NetworkMessageCode};
     use crate::state::LOCAL_APP_STATE;
-    use std::collections::HashSet;
-    use std::net::SocketAddr;
-    use std::sync::Arc;
-    use tokio::sync::Mutex;
 
     let (local_addr, site_id, clocks, cli_peers) = {
         let state = LOCAL_APP_STATE.lock().await;
@@ -118,9 +114,9 @@ pub async fn announce(ip: &str, start_port: u16, end_port: u16, selected_port: u
     };
 
     // Collect all peers to contact
-    let peer_to_ping: Vec<SocketAddr> = if !cli_peers.is_empty() {
+    let peer_to_ping: Vec<std::net::SocketAddr> = if !cli_peers.is_empty() {
         log::debug!("Manually connecting to peers based on args");
-        cli_peers.clone()
+        cli_peers
     } else {
         log::debug!("Looking for all ports to find potential peers");
         (start_port..=end_port)
@@ -129,51 +125,59 @@ pub async fn announce(ip: &str, start_port: u16, end_port: u16, selected_port: u
             .collect()
     };
 
+    //If there are no peers, we don't need to do anything
     if peer_to_ping.is_empty() {
         return;
     } else {
         let mut state = LOCAL_APP_STATE.lock().await;
-        state.init_sync(true);
+        state.init_sync(true); // we need to sync with other sites
     }
 
-    let initial_adresses: HashSet<SocketAddr> = cli_peers.into_iter().collect();
-    let adresses_arc = Arc::new(Mutex::new(initial_adresses));
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
-    // Send discovery messages and collect successful peers
+    let success_count = Arc::new(AtomicUsize::new(0));
+
+    // Send discovery messages after the decision logic
+    let mut handles = Vec::new();
     for addr in peer_to_ping {
         let site_id = site_id.clone();
         let clocks = clocks.clone();
         let local_addr = local_addr.clone();
-        let adresses_arc = Arc::clone(&adresses_arc);
+        let success_count = Arc::clone(&success_count);
 
-        let result = send_message(
-            addr,
-            MessageInfo::None,
-            None,
-            NetworkMessageCode::Discovery,
-            local_addr,
-            &site_id,
-            &site_id,
-            local_addr,
-            clocks,
-        )
-        .await;
+        let handle = tokio::spawn(async move {
+            let result = send_message(
+                addr,
+                MessageInfo::None,
+                None,
+                NetworkMessageCode::Discovery,
+                local_addr,
+                &site_id,
+                &site_id,
+                local_addr,
+                clocks,
+            )
+            .await;
 
-        if result.is_ok() {
-            let mut locked = adresses_arc.lock().await;
-            locked.insert(addr);
-        }
+            if result.is_ok() {
+                success_count.fetch_add(1, Ordering::SeqCst);
+            }
+        });
+        handles.push(handle);
     }
 
-    // Update the state with discovered neighbours
-    let final_adresses = {
-        let locked = adresses_arc.lock().await;
-        locked.clone()
-    };
+    // Await all task
+    for handle in handles {
+        let _ = handle.await;
+    }
 
+    // Update the number of attended neighbours
     {
         let mut state = LOCAL_APP_STATE.lock().await;
-        state.init_first_attended_neighbours(final_adresses);
+        let attendes = (state.get_cli_peers_addrs().len() as i64)
+            .max(success_count.load(Ordering::SeqCst) as i64);
+        state.init_nb_first_attended_neighbours(attendes);
     }
 }
 
@@ -621,12 +625,12 @@ pub async fn handle_network_message(
                 let ready_to_sync = {
                     let mut state = LOCAL_APP_STATE.lock().await;
 
-                    // Try to remove the site from the list of initial attended neighbours
-                    state.try_remove_first_attended_neighbour(message.sender_addr);
-
-                    log::debug!(
-                        "Attended neighbours state: {:?}",
-                        state.get_first_attended_neighbours()
+                    // If the site received an acknoledgement from a site,
+                    // It can be a site that is not in the network anymore
+                    state.add_incomming_peer(
+                        message.sender_addr,
+                        socket_of_the_sender,
+                        message.clock.clone(),
                     );
 
                     if message.message_initiator_addr == state.get_site_addr() {
@@ -640,7 +644,9 @@ pub async fn handle_network_message(
                     // If we are in sync mode, we can start the sync process
                     // And we have received all the responses from the first attended neighbours counter
                     // We can start the sync process by starting a snapshot with sync mode
-                    state.get_sync() && state.first_attended_neighbours_ok()
+                    state.get_sync()
+                        && state.get_nb_first_attended_neighbours()
+                            == state.get_nb_connected_neighbours()
                 };
 
                 if ready_to_sync {
