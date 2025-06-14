@@ -175,7 +175,9 @@ pub async fn announce(ip: &str, start_port: u16, end_port: u16, selected_port: u
     // Update the number of attended neighbours
     {
         let mut state = LOCAL_APP_STATE.lock().await;
-        state.init_nb_first_attended_neighbours(success_count.load(Ordering::SeqCst) as i64);
+        let attendes = (state.get_cli_peers_addrs().len() as i64)
+            .max(success_count.load(Ordering::SeqCst) as i64);
+        state.init_nb_first_attended_neighbours(attendes);
     }
 }
 
@@ -203,7 +205,7 @@ pub async fn handle_network_message(
     use rmp_serde::decode;
     use tokio::io::AsyncReadExt;
 
-    let mut buf = vec![0; 1024];
+    let mut buf = vec![0; 2048];
     loop {
         let n = stream.read(&mut buf).await?;
 
@@ -219,8 +221,6 @@ pub async fn handle_network_message(
             }
             return Ok(());
         }
-
-        log::debug!("Received {} bytes from {}", n, socket_of_the_sender);
 
         let message: Message = match decode::from_slice(&buf[..n]) {
             Ok(msg) => msg,
@@ -368,7 +368,7 @@ pub async fn handle_network_message(
                         // diffusion terminée
                         // Réinitialisation
 
-                        println!("\x1b[1;31mDiffusion terminée et réussie !\x1b[0m");
+                        println!("\x1b[1;31mDemande de mutex diffusée et réussie !\x1b[0m");
                         state.try_enter_sc();
                     } else {
                         log::debug!(
@@ -438,7 +438,7 @@ pub async fn handle_network_message(
                         // diffusion terminée
                         // Réinitialisation
 
-                        println!("\x1b[1;31mDiffusion terminée et réussie !\x1b[0m");
+                        println!("\x1b[1;31mRelachement du mutex diffusée et réussie !\x1b[0m");
                         // On vient de release la section critique, on peut essayer d'y entrer à nouveau
                         state.try_enter_sc();
                     } else {
@@ -651,7 +651,7 @@ pub async fn handle_network_message(
                     )
                     .await
                     {
-                        log::error!("Error handling command:\n{}", e);
+                        log::error!("Error handling command: {}", e);
                     }
                     // wave diffusion
                     let mut diffuse = false;
@@ -774,7 +774,9 @@ pub async fn handle_network_message(
                         // diffusion terminée
                         // Réinitialisation
 
-                        println!("\x1b[1;31mDiffusion terminée et réussie !\x1b[0m");
+                        println!(
+                            "\x1b[1;31mDiffusion d'une transaction terminée et réussie !\x1b[0m"
+                        );
                         should_reset = true;
                     } else {
                         log::debug!(
@@ -809,6 +811,7 @@ pub async fn handle_network_message(
 
                     if should_reset && state.pending_commands.len() == 0 {
                         // fin de la section critique on peut notifier les pairs
+                        println!("\x1b[1;31mRELEASE MUTEX TSX !\x1b[0m");
                         state.release_mutex().await?;
                     };
                 }
@@ -995,7 +998,7 @@ pub async fn handle_network_message(
                             }
                         }
 
-                        println!("\x1b[1;31mDiffusion terminée et réussie !\x1b[0m");
+                        println!("\x1b[1;31mSnapshot globale effectuée et réussie !\x1b[0m");
                         should_reset = true;
                     } else {
                         log::debug!(
@@ -1060,6 +1063,7 @@ pub async fn handle_network_message(
                         .insert(message.message_initiator_id, "0.0.0.0:0".parse().unwrap());
                     if should_reset && state.pending_commands.len() == 0 {
                         // fin de la section critique on peut notifier les pairs
+                        println!("\x1b[1;31mRELEASE MUTEX SNAPSHOT !\x1b[0m");
                         state.release_mutex().await?;
                     };
                 } else {
@@ -1162,7 +1166,7 @@ pub async fn send_message(
             return Err(err_msg.into());
         }
     };
-    log::debug!("Sent message {:?} to {}", &msg, recipient_address);
+    log::debug!("Sent message to {} : {:?}", recipient_address, &msg);
     Ok(())
 }
 
