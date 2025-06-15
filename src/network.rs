@@ -283,7 +283,7 @@ pub async fn handle_network_message(
                             .attended_neighbours_nb_for_transaction_wave
                             .insert(message.message_initiator_id.clone(), current_value - 1);
 
-                        log::debug!("Nombre de voisin : {}", current_value - 1);
+                        log::debug!("[AcquireMutex] Nombre de voisin : {}", current_value - 1);
 
                         diffuse = state
                             .attended_neighbours_nb_for_transaction_wave
@@ -376,7 +376,7 @@ pub async fn handle_network_message(
                         // diffusion terminée
                         // Réinitialisation
 
-                        println!("\x1b[1;31mDiffusion terminée et réussie !\x1b[0m");
+                        println!("\x1b[1;31mVague de Mutex terminée et réussie !\x1b[0m");
                         state.try_enter_sc();
                     } else {
                         log::debug!(
@@ -446,7 +446,7 @@ pub async fn handle_network_message(
                         // diffusion terminée
                         // Réinitialisation
 
-                        println!("\x1b[1;31mDiffusion terminée et réussie !\x1b[0m");
+                        println!("\x1b[1;31mRelachement de mutex terminée et réussie !\x1b[0m");
                         // On vient de release la section critique, on peut essayer d'y entrer à nouveau
                         state.try_enter_sc();
                     } else {
@@ -516,7 +516,10 @@ pub async fn handle_network_message(
                             .attended_neighbours_nb_for_transaction_wave
                             .insert(message.message_initiator_id.clone(), current_value - 1);
 
-                        log::debug!("Nombre de voisin : {}", current_value - 1);
+                        log::debug!(
+                            "[ReleaseGlobalMutex] Nombre de voisin : {}",
+                            current_value - 1
+                        );
 
                         diffuse = state
                             .attended_neighbours_nb_for_transaction_wave
@@ -687,7 +690,7 @@ pub async fn handle_network_message(
                                 .attended_neighbours_nb_for_transaction_wave
                                 .insert(message.message_initiator_id.clone(), current_value - 1);
 
-                            log::debug!("Nombre de voisin : {}", current_value - 1);
+                            log::debug!("[Transaction] Nombre de voisin : {}", current_value - 1);
 
                             diffuse = state
                                 .attended_neighbours_nb_for_transaction_wave
@@ -782,7 +785,7 @@ pub async fn handle_network_message(
                         // diffusion terminée
                         // Réinitialisation
 
-                        println!("\x1b[1;31mDiffusion terminée et réussie !\x1b[0m");
+                        println!("\x1b[1;31mVague de transaction terminée et réussie !\x1b[0m");
                         should_reset = true;
                     } else {
                         log::debug!(
@@ -861,7 +864,7 @@ pub async fn handle_network_message(
                             .attended_neighbours_nb_for_transaction_wave
                             .insert(message.message_initiator_id.clone(), current_value - 1);
 
-                        log::debug!("Nombre de voisin : {}", current_value - 1);
+                        log::debug!("[SnapshotRequest] Nombre de voisin : {}", current_value - 1);
 
                         diffuse = state
                             .attended_neighbours_nb_for_transaction_wave
@@ -1003,7 +1006,7 @@ pub async fn handle_network_message(
                             }
                         }
 
-                        println!("\x1b[1;31mDiffusion terminée et réussie !\x1b[0m");
+                        println!("\x1b[1;31mSnapShot terminée et réussie !\x1b[0m");
                         should_reset = true;
                     } else {
                         log::debug!(

@@ -193,10 +193,11 @@ impl AppState {
             let site_id = self.site_ids_to_adr.get(&addr_to_remove);
             if let Some(site_id) = site_id {
                 self.global_mutex_fifo.remove(site_id);
+                self.attended_neighbours_nb_for_transaction_wave
+                    .remove(site_id);
+                self.parent_addr_for_transaction_wave.remove(site_id);
                 self.site_ids_to_adr.remove(&addr_to_remove);
             }
-
-            // TODO: what happend if it occur during a wave diffusion ? - hard to simulate
 
             // We can keep the clock value for the site we want to remove
             // if the site re-appears, it will be updated with the new clock value
@@ -226,9 +227,11 @@ impl AppState {
             let site_id = self.site_ids_to_adr.get(&addr_to_remove);
             if let Some(site_id) = site_id {
                 self.global_mutex_fifo.remove(site_id);
+                self.attended_neighbours_nb_for_transaction_wave
+                    .remove(site_id);
+                self.parent_addr_for_transaction_wave.remove(site_id);
                 self.site_ids_to_adr.remove(&addr_to_remove);
             }
-            // TODO: what happend if it occur during a wave diffusion ? - hard to simulate
 
             // We can keep the clock value for the site we want to remove
             // if the site re-appears, it will be updated with the new clock value
