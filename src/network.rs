@@ -236,6 +236,14 @@ pub async fn handle_network_message(
             message.clone()
         );
 
+        {
+            let mut state = LOCAL_APP_STATE.lock().await;
+            state.add_site_id(
+                message.message_initiator_id.clone(),
+                message.message_initiator_addr.clone(),
+            );
+        }
+
         match message.code {
             NetworkMessageCode::AcquireMutex => {
                 // We store the request
@@ -275,7 +283,7 @@ pub async fn handle_network_message(
                             .attended_neighbours_nb_for_transaction_wave
                             .insert(message.message_initiator_id.clone(), current_value - 1);
 
-                        log::debug!("Nombre de voisin : {}", current_value - 1);
+                        log::debug!("[AcquireMutex] Nombre de voisin : {}", current_value - 1);
 
                         diffuse = state
                             .attended_neighbours_nb_for_transaction_wave
@@ -508,7 +516,10 @@ pub async fn handle_network_message(
                             .attended_neighbours_nb_for_transaction_wave
                             .insert(message.message_initiator_id.clone(), current_value - 1);
 
-                        log::debug!("Nombre de voisin : {}", current_value - 1);
+                        log::debug!(
+                            "[ReleaseGlobalMutex] Nombre de voisin : {}",
+                            current_value - 1
+                        );
 
                         diffuse = state
                             .attended_neighbours_nb_for_transaction_wave
@@ -594,7 +605,9 @@ pub async fn handle_network_message(
                     }
                     send_message(
                         message.sender_addr,
-                        MessageInfo::None,
+                        MessageInfo::Acknowledge(crate::message::AcknowledgePayload {
+                            global_fifo: state.get_global_mutex_fifo().clone(),
+                        }),
                         None,
                         NetworkMessageCode::Acknowledgment,
                         state.get_site_addr(),
@@ -631,6 +644,16 @@ pub async fn handle_network_message(
                         && state.get_nb_first_attended_neighbours()
                             == state.get_nb_connected_neighbours()
                 };
+                // Récupérer le global_fifo envoyé dans l'acknowledgment
+                let global_fifo = match &message.info {
+                    MessageInfo::Acknowledge(payload) => Some(payload.global_fifo.clone()),
+                    _ => None,
+                };
+
+                if let Some(global_fifo) = global_fifo {
+                    let mut state = LOCAL_APP_STATE.lock().await;
+                    state.set_global_mutex_fifo(global_fifo);
+                }
 
                 if ready_to_sync {
                     log::info!("All neighbours have responded, starting synchronization");
@@ -679,7 +702,7 @@ pub async fn handle_network_message(
                                 .attended_neighbours_nb_for_transaction_wave
                                 .insert(message.message_initiator_id.clone(), current_value - 1);
 
-                            log::debug!("Nombre de voisin : {}", current_value - 1);
+                            log::debug!("[Transaction] Nombre de voisin : {}", current_value - 1);
 
                             diffuse = state
                                 .attended_neighbours_nb_for_transaction_wave
@@ -856,7 +879,7 @@ pub async fn handle_network_message(
                             .attended_neighbours_nb_for_transaction_wave
                             .insert(message.message_initiator_id.clone(), current_value - 1);
 
-                        log::debug!("Nombre de voisin : {}", current_value - 1);
+                        log::debug!("[SnapshotRequest] Nombre de voisin : {}", current_value - 1);
 
                         diffuse = state
                             .attended_neighbours_nb_for_transaction_wave
