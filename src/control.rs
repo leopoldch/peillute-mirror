@@ -10,7 +10,7 @@ pub fn control_worker() {
         use crate::state::LOCAL_APP_STATE;
 
         loop {
-            // ① Récupérer Notify sans garder le verrou
+            // Récupérer Notify sans garder le verrou
             let notify = {
                 let st = LOCAL_APP_STATE.lock().await;
                 st.notify_sc.clone()
@@ -162,6 +162,10 @@ pub async fn enqueue_critical(cmd: CriticalCommands) -> Result<(), Box<dyn std::
     st.pending_commands.push_back(cmd);
 
     // si on n’est ni en SC ni déjà en attente → on déclenche la vague
+
+    log::debug!("is in sc {}", !st.in_sc);
+    log::debug!("is waiting {}", !st.waiting_sc);
+
     if !st.in_sc && !st.waiting_sc {
         st.acquire_mutex().await?;
     }
@@ -191,6 +195,10 @@ pub async fn execute_critical(cmd: CriticalCommands) -> Result<(), Box<dyn std::
     match cmd {
         CriticalCommands::CreateUser { name } => {
             use crate::message::CreateUser;
+            if name.is_empty() {
+                log::warn!("Skipping CreateUser command with empty username");
+                return Ok(());
+            }
             super::db::create_user(&name)?;
             msg = Message {
                 command: Some(Command::CreateUser),
@@ -357,6 +365,11 @@ pub async fn execute_critical(cmd: CriticalCommands) -> Result<(), Box<dyn std::
 
     if should_diffuse {
         diffuse_message(&msg).await?;
+    } else {
+        // pas release depuis le réseau si on est tout seul
+        // on doit relacher le mutex directement
+        let mut state = LOCAL_APP_STATE.lock().await;
+        let _ = state.release_mutex().await;
     };
     Ok(())
 }
@@ -372,6 +385,10 @@ pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error:
     match cmd {
         Command::CreateUser => {
             let name = prompt("Username");
+            if name.is_empty() {
+                println!("❌ Username cannot be empty");
+                return Ok(());
+            }
             enqueue_critical(CriticalCommands::CreateUser { name }).await?;
         }
 
@@ -568,6 +585,10 @@ pub async fn process_network_command(
 
     match msg {
         crate::message::MessageInfo::CreateUser(create_user) => {
+            if create_user.name.is_empty() {
+                log::warn!("Received CreateUser message with empty username, skipping");
+                return Ok(());
+            }
             if crate::db::user_exists(&create_user.name)? {
                 log::info!("User already exists, skipping");
                 return Ok(());
