@@ -23,6 +23,50 @@ The project documentation is automatically generated using `cargo doc` and deplo
 
 ## 🚀 Installation
 
+
+### Installation with Docker
+
+To set up the application using Docker, follow these steps:
+
+#### 1. Build the Docker image
+```bash
+docker build -t peillute .
+
+To set up the application using Docker, follow these steps:
+
+```bash
+docker build -t peillute .
+```
+
+#### 2. Run the container
+
+You can start the container in either interactive or detached mode:
+
+- Interactive mode (console)
+
+```bash
+docker run -it --rm --name peillute1 \
+  -e CLI_IP=0.0.0.0 \
+  -e CLI_PORT=10000 \
+  -p 10000:10000 \
+  -p 11001:11001 \
+  peillute:latest
+```
+
+- Detached mode (background)
+
+```bash
+docker run -d --name peillute1 \
+  -e CLI_IP=0.0.0.0 \
+  -e CLI_PORT=10000 \
+  -p 10000:10000 \
+  -p 11001:11001 \
+  peillute:latest
+```
+
+> Note: Once the container is running, the web application will be available at: http://localhost:11001
+
+
 ### Prerequisites
 
 Make sure you have the following installed on your system:
