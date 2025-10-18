@@ -24,63 +24,104 @@ pub fn Home() -> Element {
     });
 
     rsx! {
-        div { id: "users-list",
-            for item in users.iter() {
-                div { class: "user-card",
-                    div { class: "user-content",
-                        Link {
-                            to: Route::History {
-                                name: item.to_string(),
-                            },
-                            span { class: "user-name", "{item}" }
-                        }
+        div { class: "home-page",
+            div { class: "page-header",
+                h1 { "User Management" }
+                p { class: "page-description", "Manage users and their transactions in the Peillute system" }
+            }
+            
+            div { class: "main-content",
+                div { class: "users-section",
+                    div { class: "section-header",
+                        h2 { "Current Users" }
+                        span { class: "user-count", "{users.read().len()} user(s)" }
                     }
-                    {
-                        let item_for_delete = item.clone();
-                        rsx! {
-                            button {
-                                r#type: "button",
-                                class: "delete-btn",
-                                onclick: move |_| {
-                                    let username = item_for_delete.clone();
-                                    spawn(async move {
-                                        if let Ok(_) = delete_user(username).await {
-                                            if let Ok(data) = get_users().await {
-                                                users.set(data);
+                    
+                    div { id: "users-list",
+                        if users.read().is_empty() {
+                            div { class: "empty-users",
+                                div { class: "empty-icon", "👥" }
+                                h3 { "No users yet" }
+                                p { "Get started by adding your first user below" }
+                            }
+                        } else {
+                            for item in users.iter() {
+                                div { class: "user-card",
+                                    div { class: "user-content",
+                                        Link {
+                                            to: Route::History {
+                                                name: item.to_string(),
+                                            },
+                                            div { class: "user-info",
+                                                div { class: "user-avatar", 
+                                                    span { class: "avatar-text", "{item.chars().next().unwrap_or('U').to_uppercase()}" }
+                                                }
+                                                span { class: "user-name", "{item}" }
                                             }
                                         }
-                                    });
-                                },
-                                "X"
+                                    }
+                                    {
+                                        let item_for_delete = item.clone();
+                                        rsx! {
+                                            button {
+                                                r#type: "button",
+                                                class: "delete-btn",
+                                                title: "Delete user",
+                                                onclick: move |_| {
+                                                    let username = item_for_delete.clone();
+                                                    spawn(async move {
+                                                        if let Ok(_) = delete_user(username).await {
+                                                            if let Ok(data) = get_users().await {
+                                                                users.set(data);
+                                                            }
+                                                        }
+                                                    });
+                                                },
+                                                "🗑️"
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
                 }
-            }
-        }
-        div { id: "add-user-form",
-            form {
-                label { r#for: "fusername", "Enter a new user:" }
-                input {
-                    r#type: "text",
-                    id: "form-username",
-                    r#name: "fusername",
-                    placeholder: "New user name",
-                    value: user_input,
-                    oninput: move |event| user_input.set(event.value()),
-                }
-                button {
-                    id: "submit",
-                    r#type: "button",
-                    onclick: move |_| async move {
-                        if let Ok(_) = add_user(user_input.to_string()).await {
-                            user_input.set("".to_string());
+                
+                div { class: "add-user-section",
+                    div { class: "section-header",
+                        h2 { "Add New User" }
+                        p { "Create a new user account to start managing transactions" }
+                    }
+                    
+                    div { id: "add-user-form",
+                        form {
+                            div { class: "form-group",
+                                label { r#for: "fusername", "Username" }
+                                input {
+                                    r#type: "text",
+                                    id: "form-username",
+                                    r#name: "fusername",
+                                    placeholder: "Enter username...",
+                                    value: user_input,
+                                    oninput: move |event| user_input.set(event.value()),
+                                }
+                            }
+                            button {
+                                id: "submit",
+                                r#type: "button",
+                                disabled: user_input.read().trim().is_empty(),
+                                onclick: move |_| async move {
+                                    if let Ok(_) = add_user(user_input.to_string()).await {
+                                        user_input.set("".to_string());
+                                    }
+                                    if let Ok(data) = get_users().await {
+                                        users.set(data);
+                                    }
+                                },
+                                "➕ Add User"
+                            }
                         }
-                        if let Ok(data) = get_users().await {
-                            users.set(data);
-                        }
-                    },
-                    "Submit"
+                    }
                 }
             }
         }

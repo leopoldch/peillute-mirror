@@ -511,47 +511,97 @@ pub fn Deposit(name: String) -> Element {
     let name_for_future = name.clone();
 
     rsx! {
-        div { id: "deposit-form",
-            form {
-                label { r#for: "fdeposit", "Deposit amount :" }
-                input {
-                    r#type: "number",
-                    id: "form-deposit",
-                    r#name: "fdeposit",
-                    step: 0.01,
-                    value: "{deposit_amount}",
-                    oninput: move |event| {
-                        if let Ok(as_number) = event.value().parse::<f64>() {
-                            deposit_amount.set(as_number);
-                        }
-                    },
-                }
-                button {
-                    r#type: "button",
-                    onclick: move |_| {
-                        let name = name_for_future.clone();
-                        let amount = *deposit_amount.read();
-                        async move {
-                            if amount >= 0.0 {
-                                if let Ok(_) = deposit_for_user_server(name.to_string(), amount).await {
-                                    deposit_amount.set(0.0);
-                                    error_signal.set(None);
-                                }
-                            } else {
-                                error_signal
-                                    .set(
-                                        Some(
-                                            format!("Please enter a positive amount, you gave {amount}."),
-                                        ),
-                                    );
+        div { class: "transaction-page",
+            div { class: "transaction-header",
+                h1 { "💰 Deposit Money" }
+                p { "Add funds to your account" }
+            }
+            
+            div { class: "transaction-form",
+                form {
+                    div { class: "form-group",
+                        label { r#for: "fdeposit", "Amount to Deposit" }
+                        div { class: "input-wrapper",
+                            span { class: "currency-symbol", "€" }
+                            input {
+                                r#type: "number",
+                                id: "form-deposit",
+                                r#name: "fdeposit",
+                                step: 0.01,
+                                min: "0.01",
+                                placeholder: "0.00",
+                                value: if *deposit_amount.read() > 0.0 { "{deposit_amount}" } else { "" },
+                                oninput: move |event| {
+                                    if let Ok(as_number) = event.value().parse::<f64>() {
+                                        deposit_amount.set(as_number);
+                                    } else if event.value().is_empty() {
+                                        deposit_amount.set(0.0);
+                                    }
+                                },
                             }
                         }
-                    },
-                    "Submit"
+                    }
+                    
+                    div { class: "quick-amounts",
+                        span { class: "quick-label", "Quick amounts:" }
+                        div { class: "quick-buttons",
+                            button {
+                                r#type: "button",
+                                class: "quick-amount",
+                                onclick: move |_| deposit_amount.set(10.0),
+                                "€10"
+                            }
+                            button {
+                                r#type: "button",
+                                class: "quick-amount",
+                                onclick: move |_| deposit_amount.set(25.0),
+                                "€25"
+                            }
+                            button {
+                                r#type: "button",
+                                class: "quick-amount",
+                                onclick: move |_| deposit_amount.set(50.0),
+                                "€50"
+                            }
+                            button {
+                                r#type: "button",
+                                class: "quick-amount",
+                                onclick: move |_| deposit_amount.set(100.0),
+                                "€100"
+                            }
+                        }
+                    }
+                    
+                    button {
+                        r#type: "button",
+                        class: "submit-button",
+                        disabled: *deposit_amount.read() <= 0.0,
+                        onclick: move |_| {
+                            let name = name_for_future.clone();
+                            let amount = *deposit_amount.read();
+                            async move {
+                                if amount > 0.0 {
+                                    if let Ok(_) = deposit_for_user_server(name.to_string(), amount).await {
+                                        deposit_amount.set(0.0);
+                                        error_signal.set(None);
+                                    }
+                                } else {
+                                    error_signal
+                                        .set(
+                                            Some(
+                                                format!("Please enter a positive amount, you gave {amount}."),
+                                            ),
+                                        );
+                                }
+                            }
+                        },
+                        "💰 Deposit €{deposit_amount:.2}"
+                    }
                 }
-            }
-            if let Some(error) = &*error_signal.read() {
-                p { class: "error-message", "{error}" }
+                
+                if let Some(error) = &*error_signal.read() {
+                    div { class: "error-message", "{error}" }
+                }
             }
         }
     }

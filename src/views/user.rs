@@ -55,17 +55,75 @@ pub fn User(name: String) -> Element {
     };
 
     rsx! {
-        div { id: "user-info",
-            h1 { "Welcome {name}!" }
-            h2 { "{solde()} €" }
-        }
-        div { id: "user-page",
-            Link { to: history_route, "History" }
-            Link { to: withdraw_route, "Withdraw" }
-            Link { to: pay_route, "Pay" }
-            Link { to: refund_route, "Refund" }
-            Link { to: transfer_route, "Transfer" }
-            Link { to: deposit_route, "Deposit" }
+        div { class: "user-dashboard",
+            div { class: "dashboard-header",
+                div { class: "user-welcome",
+                    h1 { "Welcome back, {name}!" }
+                    div { class: "balance-display",
+                        span { class: "balance-label", "Current Balance" }
+                        h2 { class: "balance-amount", "€{solde():.2}" }
+                    }
+                }
+            }
+            
+            div { class: "dashboard-content",
+                div { class: "quick-actions",
+                    div { class: "section-header",
+                        h3 { "Quick Actions" }
+                        p { "Most common transactions" }
+                    }
+                    div { class: "action-grid primary",
+                        Link { 
+                            to: deposit_route, 
+                            class: "action-card primary",
+                            div { class: "action-icon", "💰" }
+                            span { class: "action-label", "Deposit" }
+                            span { class: "action-desc", "Add money" }
+                        }
+                        Link { 
+                            to: withdraw_route, 
+                            class: "action-card primary",
+                            div { class: "action-icon", "💸" }
+                            span { class: "action-label", "Withdraw" }
+                            span { class: "action-desc", "Take money out" }
+                        }
+                        Link { 
+                            to: pay_route, 
+                            class: "action-card primary",
+                            div { class: "action-icon", "🛒" }
+                            span { class: "action-label", "Pay" }
+                            span { class: "action-desc", "Make purchases" }
+                        }
+                    }
+                }
+                
+                div { class: "more-actions",
+                    div { class: "section-header",
+                        h3 { "More Actions" }
+                        p { "Additional transaction options" }
+                    }
+                    div { class: "action-grid secondary",
+                        Link { 
+                            to: history_route, 
+                            class: "action-card secondary",
+                            div { class: "action-icon", "📊" }
+                            span { class: "action-label", "History" }
+                        }
+                        Link { 
+                            to: transfer_route, 
+                            class: "action-card secondary",
+                            div { class: "action-icon", "💸" }
+                            span { class: "action-label", "Transfer" }
+                        }
+                        Link { 
+                            to: refund_route, 
+                            class: "action-card secondary",
+                            div { class: "action-icon", "🔄" }
+                            span { class: "action-label", "Refund" }
+                        }
+                    }
+                }
+            }
         }
         Outlet::<Route> {}
     }
