@@ -1,0 +1,58 @@
+version: '3.8'
+services:
+  n1:
+    image: peillute:latest
+    container_name: n1
+    environment:
+      CLI_IP: 172.18.0.2
+      CLI_PORT: 10000
+      CLI_PEERS: 172.18.0.3:10001
+    networks:
+      peillute:
+        ipv4_address: 172.18.0.2
+    ports:
+      - "10000:10000"
+      - "8080:11001"
+    stdin_open: true
+    tty: true
+
+  n2:
+    image: peillute:latest
+    container_name: n2
+    entrypoint: ["/bin/sh","-c","sleep 1 && /usr/local/bin/entrypoint.sh"]
+    environment:
+      CLI_IP: 172.18.0.3
+      CLI_PORT: 10001
+      CLI_PEERS: 172.18.0.2:10000,172.18.0.4:10002
+    networks:
+      peillute:
+        ipv4_address: 172.18.0.3
+    ports:
+      - "10001:10001"
+      - "8081:11002"
+    stdin_open: true
+    tty: true
+
+  n3:
+    image: peillute:latest
+    container_name: n3
+    entrypoint: ["/bin/sh","-c","sleep 2 && /usr/local/bin/entrypoint.sh"]
+    environment:
+      CLI_IP: 172.18.0.4
+      CLI_PORT: 10002
+      CLI_PEERS: 172.18.0.3:10001
+    networks:
+      peillute:
+        ipv4_address: 172.18.0.4
+    ports:
+      - "10002:10002"
+      - "8082:11003"
+    stdin_open: true
+    tty: true
+
+networks:
+  peillute:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.18.0.0/16

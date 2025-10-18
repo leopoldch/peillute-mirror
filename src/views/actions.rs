@@ -104,7 +104,7 @@ pub fn Withdraw(name: String) -> Element {
                     },
                 }
                 button {
-                    r#type: "submit",
+                    r#type: "button",
                     onclick: move |_| {
                         let name = name_for_future.clone();
                         let amount = *withdraw_amount.read();
@@ -239,7 +239,7 @@ pub fn Pay(name: String) -> Element {
                 h3 { "Total: €{current_total_display():.2}" }
                 form {
                     button {
-                        r#type: "submit",
+                        r#type: "button",
                         disabled: current_total_display() == 0.0,
                         onclick: handle_pay,
                         "Pay Now"
@@ -318,7 +318,7 @@ pub fn Refund(name: String) -> Element {
                                             let mut resource_to_refresh = transactions_resource.clone();
                                             rsx! {
                                                 button {
-                                                    r#type: "submit",
+                                                    r#type: "button",
                                                     onclick: move |_| {
                                                         let name_for_future = name_for_refund.clone();
                                                         let transaction_for_future = transaction_for_refund.clone();
@@ -452,7 +452,7 @@ pub fn Transfer(name: String) -> Element {
                             "Select a random message"
                         }
                         button {
-                            r#type: "submit",
+                            r#type: "button",
                             onclick: move |_| {
                                 let to_user = selected_user.read().clone();
                                 let amount = *transfer_amount.read();
@@ -527,7 +527,7 @@ pub fn Deposit(name: String) -> Element {
                     },
                 }
                 button {
-                    r#type: "submit",
+                    r#type: "button",
                     onclick: move |_| {
                         let name = name_for_future.clone();
                         let amount = *deposit_amount.read();

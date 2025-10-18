@@ -21,7 +21,7 @@ RUN curl -L --proto '=https' --tlsv1.2 -sSf \
   https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash \
  && cargo binstall -y dioxus-cli
 
-RUN dx bundle --release --platform web
+RUN  RUST_LOG=debug RUST_BACKTRACE=1 dx bundle --release --platform web
 
 FROM debian:bookworm-slim AS runtime
 
@@ -49,7 +49,7 @@ RUN printf '%s\n' \
   'if [ -n "$CLI_PEERS" ]; then' \
   '  ARGS="$ARGS --cli-peers $CLI_PEERS"' \
   'fi' \
-  'exec /app/web/server $ARGS' \
+  'export RUST_LOG=debug && exec /app/web/server $ARGS' \
   > /usr/local/bin/entrypoint.sh \
  && chmod +x /usr/local/bin/entrypoint.sh
 
