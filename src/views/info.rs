@@ -275,7 +275,7 @@ pub fn Info() -> Element {
                 form {
                     button {
                         class: "snapshot",
-                        r#type: "submit",
+                        r#type: "button",
                         onclick: move |_| {
                             async move {
                                 if let Err(e) = ask_for_snapshot().await {

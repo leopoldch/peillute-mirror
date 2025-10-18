@@ -71,7 +71,7 @@ pub fn Home() -> Element {
                 }
                 button {
                     id: "submit",
-                    r#type: "submit",
+                    r#type: "button",
                     onclick: move |_| async move {
                         if let Ok(_) = add_user(user_input.to_string()).await {
                             user_input.set("".to_string());

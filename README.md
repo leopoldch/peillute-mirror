@@ -66,6 +66,37 @@ docker run -d --name peillute1 \
 
 > Note: Once the container is running, the web application will be available at: http://localhost:11001
 
+### Docker Compose Deployment
+
+#### Test Scenario
+Deploy a three-node distributed network with the following topology:
+```
+n1 ↔ n2 ↔ n3
+```
+
+Where:
+- **n1**: Node 1
+- **n2**: Node 2 (central node)
+- **n3**: Node 3
+
+#### Commands
+
+**Start the network:**
+```bash
+docker-compose up -d
+```
+
+**Stop and remove the network:**
+```bash
+docker-compose down
+```
+
+#### Network Configuration
+Each node is automatically configured with:
+- Unique IP addresses on the Docker bridge network
+- Peer connections to adjacent nodes
+- Web interface accessible on ports 8080, 8081, and 8082 respectively
+
 
 ### Prerequisites
 
