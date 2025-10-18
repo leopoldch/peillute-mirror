@@ -29,10 +29,6 @@ The project documentation is automatically generated using `cargo doc` and deplo
 To set up the application using Docker, follow these steps:
 
 #### 1. Build the Docker image
-```bash
-docker build -t peillute .
-
-To set up the application using Docker, follow these steps:
 
 ```bash
 docker build -t peillute .
